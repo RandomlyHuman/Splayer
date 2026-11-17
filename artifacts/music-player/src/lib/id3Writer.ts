@@ -5,10 +5,8 @@
  */
 import type { Track } from "./types";
 import { platformAPI } from "./platform-api";
-// browser-id3-writer is a CJS module — import the namespace and cast
-import * as ID3WriterModule from "browser-id3-writer";
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const ID3Writer: any = (ID3WriterModule as any).default ?? ID3WriterModule;
+// browser-id3-writer v6 exporta la clase con nombre (no tiene export default)
+import { ID3Writer } from "browser-id3-writer";
 
 export interface TagUpdate {
   title?: string;
