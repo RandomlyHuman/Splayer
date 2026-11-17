@@ -185,7 +185,6 @@
     "yt-search": "^2.13.1"
   },
   "optionalDependencies": {
-    "@jellyfin/windows-media-transport-controls": "*",
-    "@workspace/api-client-react": "workspace:*"
+    "@jellyfin/windows-media-transport-controls": "*"
   }
 }
