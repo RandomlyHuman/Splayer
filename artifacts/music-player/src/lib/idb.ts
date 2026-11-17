@@ -162,6 +162,8 @@ async function getDB() {
             db.createObjectStore('settings', { keyPath: 'id' });
           }
         }
+        // v6-v7: almacenes de podcasts y audiolibros (funciones eliminadas; se
+        // conservan los almacenes para no romper bases de datos existentes)
         if (oldVersion < 6) {
           if (!db.objectStoreNames.contains('podcasts')) {
             db.createObjectStore('podcasts', { keyPath: 'id' });
@@ -262,129 +264,4 @@ export async function saveWatchedFolders(folders: string[]): Promise<void> {
   await db.put('settings', { id: 'watched-folders', value: folders });
 }
 
-export type { StoredTrack, StoredPlaylist, StoredPodcast, StoredEpisode, StoredBook, StoredBookChapter, StoredBookBookmark };
-
-// ── Podcasts ──────────────────────────────────────────────────────────────────
-
-export async function getAllPodcasts(): Promise<StoredPodcast[]> {
-  const db = await getDB();
-  return db.getAll('podcasts');
-}
-
-export async function savePodcast(p: StoredPodcast): Promise<void> {
-  const db = await getDB();
-  await db.put('podcasts', p);
-}
-
-export async function deletePodcast(id: string): Promise<void> {
-  const db = await getDB();
-  await db.delete('podcasts', id);
-}
-
-export async function getEpisodesByPodcast(podcastId: string): Promise<StoredEpisode[]> {
-  const db = await getDB();
-  return db.getAllFromIndex('episodes', 'by-podcast', podcastId);
-}
-
-export async function saveEpisodes(eps: StoredEpisode[]): Promise<void> {
-  const db = await getDB();
-  const tx = db.transaction('episodes', 'readwrite');
-  await Promise.all(eps.map((e) => tx.store.put(e)));
-  await tx.done;
-}
-
-export async function updateEpisode(id: string, patch: Partial<StoredEpisode>): Promise<void> {
-  const db = await getDB();
-  const ep = await db.get('episodes', id);
-  if (!ep) return;
-  await db.put('episodes', { ...ep, ...patch });
-}
-
-export async function deleteEpisodesByPodcast(podcastId: string): Promise<void> {
-  const db = await getDB();
-  const eps = await db.getAllFromIndex('episodes', 'by-podcast', podcastId);
-  const tx = db.transaction('episodes', 'readwrite');
-  await Promise.all(eps.map((e) => tx.store.delete(e.id)));
-  await tx.done;
-}
-
-// ── Books ─────────────────────────────────────────────────────────────────────
-
-export async function getAllBooks(): Promise<StoredBook[]> {
-  const db = await getDB();
-  return db.getAll('books');
-}
-
-export async function getBookById(id: string): Promise<StoredBook | undefined> {
-  const db = await getDB();
-  return db.get('books', id);
-}
-
-export async function saveBook(b: StoredBook): Promise<void> {
-  const db = await getDB();
-  await db.put('books', b);
-}
-
-export async function updateBook(id: string, patch: Partial<StoredBook>): Promise<void> {
-  const db = await getDB();
-  const book = await db.get('books', id);
-  if (!book) return;
-  await db.put('books', { ...book, ...patch });
-}
-
-export async function deleteBook(id: string): Promise<void> {
-  const db = await getDB();
-  await db.delete('books', id);
-}
-
-export async function getChaptersByBook(bookId: string): Promise<StoredBookChapter[]> {
-  const db = await getDB();
-  const rows = await db.getAllFromIndex('book_chapters', 'by-book', bookId);
-  return rows.sort((a, b) => a.index - b.index);
-}
-
-export async function saveChapters(chapters: StoredBookChapter[]): Promise<void> {
-  const db = await getDB();
-  const tx = db.transaction('book_chapters', 'readwrite');
-  await Promise.all(chapters.map((c) => tx.store.put(c)));
-  await tx.done;
-}
-
-export async function updateChapter(id: string, patch: Partial<StoredBookChapter>): Promise<void> {
-  const db = await getDB();
-  const ch = await db.get('book_chapters', id);
-  if (!ch) return;
-  await db.put('book_chapters', { ...ch, ...patch });
-}
-
-export async function deleteChaptersByBook(bookId: string): Promise<void> {
-  const db = await getDB();
-  const chs = await db.getAllFromIndex('book_chapters', 'by-book', bookId);
-  const tx = db.transaction('book_chapters', 'readwrite');
-  await Promise.all(chs.map((c) => tx.store.delete(c.id)));
-  await tx.done;
-}
-
-export async function getBookmarksByBook(bookId: string): Promise<StoredBookBookmark[]> {
-  const db = await getDB();
-  const rows = await db.getAllFromIndex('book_bookmarks', 'by-book', bookId);
-  return rows.sort((a, b) => a.time - b.time);
-}
-
-export async function saveBookmark(bm: StoredBookBookmark): Promise<void> {
-  const db = await getDB();
-  await db.put('book_bookmarks', bm);
-}
-
-export async function deleteBookmark(id: string): Promise<void> {
-  const db = await getDB();
-  await db.delete('book_bookmarks', id);
-}
-
-export async function deleteBookmarksByBook(bookId: string): Promise<void> {
-  const db = await getDB();
-  const bms = await db.getAllFromIndex('book_bookmarks', 'by-book', bookId);
-  const tx = db.transaction('book_bookmarks', 'readwrite');
-  await Promise.all(bms.map((b) => tx.store.delete(b.id)));
-  await tx.done;
-}
+export type { StoredTrack, StoredPlaylist };

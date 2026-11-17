@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Activity, BarChart2, Flame, Gauge, Pause, Play, SkipBack, SkipForward, Sparkles, Wand2, X, Zap } from "lucide-react";
 import { usePlayer } from "@/lib/player-context";
-import { currentPlatform } from "@/lib/platform-api";
 import { trackCoverUrl } from "@/lib/types";
 import { AlbumCover } from "./AlbumCover";
 import { cn } from "@/lib/utils";
@@ -211,11 +210,8 @@ export function FullscreenVisualizer({ onClose }: Props) {
           ctx.rect(0, barClipTop, w, h - barClipTop);
           ctx.clip();
         }
-        // Fewer, wider bars on mobile — thick bold bars suit a small portrait screen
-        const BAR_COUNT = currentPlatform === "android" ? 28 : 80;
-        const gap       = currentPlatform === "android"
-          ? Math.max(4, Math.round(5 * dpr))
-          : Math.max(2, Math.round(2 * dpr));
+        const BAR_COUNT = 80;
+        const gap       = Math.max(2, Math.round(2 * dpr));
         const barW      = Math.max(1, Math.floor((w - (BAR_COUNT - 1) * gap) / BAR_COUNT));
 
         const grad = ctx.createLinearGradient(0, h, 0, 0);
@@ -476,7 +472,6 @@ export function FullscreenVisualizer({ onClose }: Props) {
   };
 
   const cover    = currentTrack ? trackCoverUrl(currentTrack) : undefined;
-  const isMobile = currentPlatform === "android";
 
   return (
     <div
@@ -496,9 +491,7 @@ export function FullscreenVisualizer({ onClose }: Props) {
           <>
             <div
               className="rounded-2xl overflow-hidden shadow-[0_32px_96px_-8px_rgba(0,0,0,0.85)] pointer-events-none"
-              style={isMobile
-                ? { width: "min(45vw, 220px)", height: "min(45vw, 220px)" }
-                : { width: 220, height: 220 }}
+              style={{ width: 220, height: 220 }}
             >
               <AlbumCover
                 src={cover}
@@ -513,7 +506,7 @@ export function FullscreenVisualizer({ onClose }: Props) {
             <div className="flex flex-col items-center gap-1 pointer-events-none">
               <p className={cn(
                 "text-white font-semibold text-center drop-shadow-lg truncate",
-                isMobile ? "text-xl max-w-[85vw]" : "text-2xl max-w-xl",
+                "text-2xl max-w-xl",
               )}>
                 {currentTrack.title}
               </p>
@@ -522,26 +515,26 @@ export function FullscreenVisualizer({ onClose }: Props) {
               </p>
             </div>
 
-            <div className={cn("flex items-center", isMobile ? "gap-6" : "gap-2.5")}>
+            <div className={cn("flex items-center", "gap-2.5")}>
               <button
                 onClick={prev}
-                className={cn("flex items-center justify-center rounded-full bg-white/12 active:bg-white/22 text-white transition-colors", isMobile ? "w-14 h-14" : "w-9 h-9")}
+                className={cn("flex items-center justify-center rounded-full bg-white/12 active:bg-white/22 text-white transition-colors", "w-9 h-9")}
               >
-                <SkipBack className={cn("fill-current", isMobile ? "w-6 h-6" : "w-4 h-4")} />
+                <SkipBack className={cn("fill-current", "w-4 h-4")} />
               </button>
               <button
                 onClick={togglePlay}
-                className={cn("flex items-center justify-center rounded-full bg-white/22 active:bg-white/32 text-white transition-colors", isMobile ? "w-16 h-16" : "w-10 h-10")}
+                className={cn("flex items-center justify-center rounded-full bg-white/22 active:bg-white/32 text-white transition-colors", "w-10 h-10")}
               >
                 {isPlaying
-                  ? <Pause className={cn("fill-current", isMobile ? "w-7 h-7" : "w-5 h-5")} />
-                  : <Play  className={cn("fill-current ml-0.5", isMobile ? "w-7 h-7" : "w-5 h-5")} />}
+                  ? <Pause className={cn("fill-current", "w-5 h-5")} />
+                  : <Play  className={cn("fill-current ml-0.5", "w-5 h-5")} />}
               </button>
               <button
                 onClick={next}
-                className={cn("flex items-center justify-center rounded-full bg-white/12 active:bg-white/22 text-white transition-colors", isMobile ? "w-14 h-14" : "w-9 h-9")}
+                className={cn("flex items-center justify-center rounded-full bg-white/12 active:bg-white/22 text-white transition-colors", "w-9 h-9")}
               >
-                <SkipForward className={cn("fill-current", isMobile ? "w-6 h-6" : "w-4 h-4")} />
+                <SkipForward className={cn("fill-current", "w-4 h-4")} />
               </button>
             </div>
           </>
@@ -561,26 +554,41 @@ export function FullscreenVisualizer({ onClose }: Props) {
         style={{
           background: "linear-gradient(to bottom, rgba(0,0,0,0.75) 0%, transparent 100%)",
           paddingBottom: 44,
-          ...(isMobile ? { paddingTop: "env(safe-area-inset-top, 0px)" } : {}),
         }}
       >
-        {isMobile ? (
-          /* ── Mobile: single horizontally-scrollable row — never clips ──── */
-          <div
-            className="flex items-center gap-2 overflow-x-auto px-4 pt-4 pb-3"
-            style={{ WebkitOverflowScrolling: "touch" }}
+        {/* ── Barra superior ─────────────────────────────────────────────────── */}
+        <div className="flex items-center justify-between px-5 py-4">
+          <button
+            onClick={onClose}
+            className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-white/12 hover:bg-white/22 text-white text-xs font-medium transition-colors backdrop-blur-sm"
           >
-            <button
-              onClick={onClose}
-              className="flex-shrink-0 flex items-center gap-1.5 min-h-[44px] px-3 rounded-xl bg-white/12 active:bg-white/22 text-white text-xs font-medium transition-colors backdrop-blur-sm"
-            >
-              <X className="w-3.5 h-3.5 shrink-0" />
-              Exit
-            </button>
+            <X className="w-3.5 h-3.5 shrink-0" />
+            Exit
+            <span className="text-white/40 font-normal ml-0.5 text-[11px]">ESC</span>
+          </button>
+          <div className="flex items-center gap-2">
+            {vizMode === "ambient" && (
+              <div className="flex items-center gap-1">
+                {AMBIENT_INTENSITIES.map(level => (
+                  <button
+                    key={level}
+                    onClick={() => changeAmbientIntensity(level)}
+                    className={cn(
+                      "h-8 px-2.5 rounded-lg text-xs font-medium transition-colors backdrop-blur-sm",
+                      ambientIntensity === level
+                        ? "bg-white/30 text-white"
+                        : "bg-white/10 hover:bg-white/20 text-white/65 hover:text-white",
+                    )}
+                  >
+                    {AMBIENT_INTENSITY_LABELS[level]}
+                  </button>
+                ))}
+              </div>
+            )}
             {vizMode === "reactive" && (
               <button
                 onClick={toggleReactiveSubMode}
-                className="flex-shrink-0 flex items-center gap-1.5 min-h-[44px] px-3 rounded-xl bg-white/12 active:bg-white/22 text-white text-xs font-medium transition-colors backdrop-blur-sm"
+                className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-white/12 hover:bg-white/22 text-white text-xs font-medium transition-colors backdrop-blur-sm"
               >
                 {reactiveSubMode === "pure"
                   ? <Gauge className="w-3.5 h-3.5 shrink-0" />
@@ -590,7 +598,7 @@ export function FullscreenVisualizer({ onClose }: Props) {
             )}
             <button
               onClick={toggleMode}
-              className="flex-shrink-0 flex items-center gap-1.5 min-h-[44px] px-3 rounded-xl bg-white/12 active:bg-white/22 text-white text-xs font-medium transition-colors backdrop-blur-sm"
+              className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-white/12 hover:bg-white/22 text-white text-xs font-medium transition-colors backdrop-blur-sm"
             >
               {vizMode === "ambient"
                 ? <Wand2 className="w-3.5 h-3.5 shrink-0" />
@@ -599,90 +607,15 @@ export function FullscreenVisualizer({ onClose }: Props) {
             </button>
             <button
               onClick={cycleStyle}
-              className="flex-shrink-0 flex items-center gap-1.5 min-h-[44px] px-3 rounded-xl bg-white/12 active:bg-white/22 text-white text-xs font-medium transition-colors backdrop-blur-sm"
+              className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-white/12 hover:bg-white/22 text-white text-xs font-medium transition-colors backdrop-blur-sm"
             >
               {vizStyle === "bars"      && <BarChart2 className="w-3.5 h-3.5 shrink-0" />}
               {vizStyle === "wave"      && <Activity  className="w-3.5 h-3.5 shrink-0" />}
               {vizStyle === "particles" && <Sparkles  className="w-3.5 h-3.5 shrink-0" />}
               {STYLE_LABELS[vizStyle]}
             </button>
-            {vizMode === "ambient" && AMBIENT_INTENSITIES.map(level => (
-              <button
-                key={level}
-                onClick={() => changeAmbientIntensity(level)}
-                className={cn(
-                  "flex-shrink-0 min-h-[44px] px-3 rounded-xl text-xs font-medium transition-colors backdrop-blur-sm",
-                  ambientIntensity === level
-                    ? "bg-white/30 text-white"
-                    : "bg-white/10 active:bg-white/20 text-white/65",
-                )}
-              >
-                {AMBIENT_INTENSITY_LABELS[level]}
-              </button>
-            ))}
           </div>
-        ) : (
-          /* ── Desktop: single-row layout ──────────────────────────────────── */
-          <div className="flex items-center justify-between px-5 py-4">
-            <button
-              onClick={onClose}
-              className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-white/12 hover:bg-white/22 text-white text-xs font-medium transition-colors backdrop-blur-sm"
-            >
-              <X className="w-3.5 h-3.5 shrink-0" />
-              Exit
-              <span className="text-white/40 font-normal ml-0.5 text-[11px]">ESC</span>
-            </button>
-            <div className="flex items-center gap-2">
-              {vizMode === "ambient" && (
-                <div className="flex items-center gap-1">
-                  {AMBIENT_INTENSITIES.map(level => (
-                    <button
-                      key={level}
-                      onClick={() => changeAmbientIntensity(level)}
-                      className={cn(
-                        "h-8 px-2.5 rounded-lg text-xs font-medium transition-colors backdrop-blur-sm",
-                        ambientIntensity === level
-                          ? "bg-white/30 text-white"
-                          : "bg-white/10 hover:bg-white/20 text-white/65 hover:text-white",
-                      )}
-                    >
-                      {AMBIENT_INTENSITY_LABELS[level]}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {vizMode === "reactive" && (
-                <button
-                  onClick={toggleReactiveSubMode}
-                  className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-white/12 hover:bg-white/22 text-white text-xs font-medium transition-colors backdrop-blur-sm"
-                >
-                  {reactiveSubMode === "pure"
-                    ? <Gauge className="w-3.5 h-3.5 shrink-0" />
-                    : <Flame className="w-3.5 h-3.5 shrink-0" />}
-                  {reactiveSubMode === "pure" ? "Pure" : "Amplified"}
-                </button>
-              )}
-              <button
-                onClick={toggleMode}
-                className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-white/12 hover:bg-white/22 text-white text-xs font-medium transition-colors backdrop-blur-sm"
-              >
-                {vizMode === "ambient"
-                  ? <Wand2 className="w-3.5 h-3.5 shrink-0" />
-                  : <Zap   className="w-3.5 h-3.5 shrink-0" />}
-                {vizMode === "ambient" ? "Ambient" : "Reactive"}
-              </button>
-              <button
-                onClick={cycleStyle}
-                className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-white/12 hover:bg-white/22 text-white text-xs font-medium transition-colors backdrop-blur-sm"
-              >
-                {vizStyle === "bars"      && <BarChart2 className="w-3.5 h-3.5 shrink-0" />}
-                {vizStyle === "wave"      && <Activity  className="w-3.5 h-3.5 shrink-0" />}
-                {vizStyle === "particles" && <Sparkles  className="w-3.5 h-3.5 shrink-0" />}
-                {STYLE_LABELS[vizStyle]}
-              </button>
-            </div>
-          </div>
-        )}
+        </div>
       </div>
     </div>
   );

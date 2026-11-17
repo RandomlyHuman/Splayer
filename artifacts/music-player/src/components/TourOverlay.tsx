@@ -70,16 +70,6 @@ const STEPS: Step[] = [
     description: "Pop out a mini player so you can control music from anywhere on your desktop.",
   },
   {
-    selector: '[data-testid="tab-podcasts"]',
-    title: "Podcasts",
-    description: "Subscribe to any podcast via RSS feed or import from YouTube. New episodes sync automatically.",
-  },
-  {
-    selector: '[data-testid="tab-books"]',
-    title: "Audiobooks",
-    description: "Add local audiobook files or import from YouTube. Splayer remembers your position in each book automatically.",
-  },
-  {
     selector: '[data-testid="button-jump-to-current"]',
     title: "Jump to Current Song",
     description: "Lost track of what's playing? Click this button to instantly scroll your library to the current song.",

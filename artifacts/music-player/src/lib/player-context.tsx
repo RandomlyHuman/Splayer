@@ -1,4 +1,4 @@
-import { platformAPI, currentPlatform, convertFileUri } from "./platform-api";
+import { platformAPI, convertFileUri } from "./platform-api";
 import {
   createContext,
   useCallback,
@@ -146,7 +146,6 @@ interface PlayerContextValue {
   setMiniMode: (v: boolean) => void;
   fsVizOpen: boolean;
   setFsVizOpen: (v: boolean) => void;
-  playEphemeral: (track: Track, startTime?: number) => void;
   // Jump buttons
   skipBackSecs: number;
   skipForwardSecs: number;
@@ -162,14 +161,12 @@ interface PlayerContextValue {
 export type ButtonKey =
   | "shuffle" | "repeat" | "prevTrack" | "nextTrack"
   | "sleepTimer" | "speed" | "crossfade" | "volume"
-  | "equalizer" | "miniPlayer" | "fsVisualizer" | "lyrics" | "queue"
-  | "podcasts" | "audiobooks";
+  | "equalizer" | "miniPlayer" | "fsVisualizer" | "lyrics" | "queue";
 
 export const BUTTON_VISIBILITY_DEFAULTS: Record<ButtonKey, boolean> = {
   shuffle: true, repeat: true, prevTrack: true, nextTrack: true,
   sleepTimer: true, speed: true, crossfade: true, volume: true,
   equalizer: true, miniPlayer: true, fsVisualizer: true, lyrics: true, queue: true,
-  podcasts: true, audiobooks: true,
 };
 
 const PlayerContext = createContext<PlayerContextValue | null>(null);
@@ -1225,7 +1222,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
               );
               url = URL.createObjectURL(file);
             } else {
-              // Android track: content URI stored, no blob
+              // Pista guardada solo con ruta (sin blob)
               const mimeType = s.fileType ?? "audio/mpeg";
               file = new File([], s.fileName ?? "track", { type: mimeType });
               url = convertFileUri(s.filePath!);
@@ -1513,120 +1510,6 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  // ----- Android notification button handler -----
-  // Registered once at mount; uses refs so it never needs re-registering.
-  useEffect(() => {
-    if (currentPlatform !== "android" || !platformAPI?.onTrayAction) return;
-    const cleanup = platformAPI.onTrayAction((action: unknown) => {
-      const a = action as string;
-      console.log("[TrayAction] handler called, action=" + a);
-      if (a === "play" || a === "pause") togglePlayRef.current();
-      else if (a === "next") nextRef.current();
-      else if (a === "previous" || a === "prev") prevRef.current();
-    });
-    console.log("[TrayAction] handler registered");
-    return cleanup as () => void;
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ----- Android MediaSession sync -----
-
-  // Cached artwork base64 so we only re-fetch when the track changes.
-  const mediaArtRef   = useRef<string>("");
-  const mediaArtTrack = useRef<string>("");
-
-  // Update the Android MediaSession notification whenever track or isPlaying changes.
-  useEffect(() => {
-    console.log("[MediaSession] effect fired: platform=" + currentPlatform
-      + " trackId=" + currentTrack?.id + " isPlaying=" + isPlaying);
-    if (currentPlatform !== "android" || !platformAPI) {
-      console.log("[MediaSession] skip — not android or no platformAPI");
-      return;
-    }
-    const api = platformAPI as unknown as {
-      updateMediaSession?: (o: Record<string, unknown>) => Promise<void>;
-    };
-    if (!api.updateMediaSession) {
-      console.log("[MediaSession] skip — updateMediaSession method not found");
-      return;
-    }
-
-    const t = currentTrack;
-
-    // Build the base payload.  fileUri (the content:// URI) is passed on every
-    // call so the Java side can load embedded album art via MediaMetadataRetriever
-    // without any JS fetch/base64 round-trip.
-    const basePayload = () => ({
-      title:      t?.title  ?? "",
-      artist:     t?.artist ?? "",
-      album:      t?.album  ?? "",
-      fileUri:    (t as { path?: string } | null)?.path ?? "",
-      isPlaying,
-      positionMs: Math.round(currentTime * 1000),
-      durationMs: Math.round((duration || t?.duration || 0) * 1000),
-    });
-
-    if (!t) {
-      api.updateMediaSession!(basePayload());
-      return;
-    }
-
-    const trackId = t.id;
-
-    if (mediaArtTrack.current === trackId) {
-      // Same track — just update playback state.
-      // Only include artBase64 if we have a cached custom cover.
-      const payload: Record<string, unknown> = basePayload();
-      if (mediaArtRef.current) payload.artBase64 = mediaArtRef.current;
-      api.updateMediaSession!(payload);
-      return;
-    }
-
-    // Track changed — reset cache and push state (notification side loads art via fileUri).
-    mediaArtTrack.current = trackId;
-    mediaArtRef.current   = "";
-    api.updateMediaSession!(basePayload());
-
-    const trackPath = (t as { path?: string }).path;
-    const getTrackArt = (platformAPI as unknown as { getTrackArt?: (uri: string) => Promise<string> }).getTrackArt;
-
-    if (trackPath && getTrackArt) {
-      // Fetch embedded art natively (same source as the notification uses).
-      // On success, update the in-app player by setting embeddedCoverUrl and
-      // also forward the base64 to the notification service.
-      getTrackArt(trackPath)
-        .then((dataUrl) => {
-          if (mediaArtTrack.current !== trackId) return;
-          if (!dataUrl) return;
-          const b64 = dataUrl.split(",")[1] ?? "";
-          mediaArtRef.current = b64;
-          // Update in-app player — sets embeddedCoverUrl so AlbumCover shows the art.
-          setTracks((prev) => prev.map((tr) =>
-            tr.id === trackId ? { ...tr, embeddedCoverUrl: dataUrl } : tr,
-          ));
-          // Also push the art to the notification (belt-and-suspenders alongside fileUri).
-          api.updateMediaSession!({ ...basePayload(), artBase64: b64 });
-        })
-        .catch(() => {});
-    } else if (t.customCoverUrl) {
-      // No content URI (e.g. YouTube download) — fall back to fetching the custom cover.
-      fetch(t.customCoverUrl)
-        .then((r) => r.blob())
-        .then((blob) => new Promise<string>((res) => {
-          const reader = new FileReader();
-          reader.onload = () => res((reader.result as string).split(",")[1] ?? "");
-          reader.onerror = () => res("");
-          reader.readAsDataURL(blob);
-        }))
-        .then((b64) => {
-          if (mediaArtTrack.current === trackId && b64) {
-            mediaArtRef.current = b64;
-            api.updateMediaSession!({ ...basePayload(), artBase64: b64 });
-          }
-        })
-        .catch(() => {});
-    }
-  }, [currentTrack?.id, isPlaying]); // eslint-disable-line react-hooks/exhaustive-deps
-
   // ----- background download queue -----
 
   const [downloads, setDownloads] = useState<ActiveDownload[]>([]);
@@ -1741,27 +1624,6 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     return () => navigator.mediaDevices.removeEventListener("devicechange", onDeviceChange);
   }, [toast]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const playEphemeral = useCallback((track: Track, startTime = 0) => {
-    setEphemeralTracks((prev) =>
-      prev.find((t) => t.id === track.id) ? prev : [...prev, track],
-    );
-    const audio = audioRef.current;
-    if (!audio) return;
-    cancelXf();
-    audio.src = track.url;
-    audio.load();
-    countedTrackIdRef.current = null;
-    setCurrentTrackId(track.id);
-    setCurrentQueueIds(null);
-    setCurrentQueueLabel("Podcast");
-    ensureWA(audio);
-    audio.volume = mutedRef.current ? 0 : volumeRef.current;
-    const safeStart = (typeof startTime === "number" && isFinite(startTime) && startTime > 0) ? startTime : 0;
-    audio.addEventListener("canplay", () => {
-      if (safeStart > 0) audio.currentTime = safeStart;
-      audio.play().catch(() => {});
-    }, { once: true });
-  }, [cancelXf, ensureWA]);
   const downloadsRef = useRef<ActiveDownload[]>([]);
   downloadsRef.current = downloads;
   const dlProcessingRef = useRef(false);
@@ -1835,7 +1697,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           const res = result as any;
 
           if (res.filePath && !(res.bytes?.byteLength > 0)) {
-            // Android fast path: Java already streamed the file to disk.
+            // Ruta rápida: el archivo ya está escrito en disco.
             // Skip loading any bytes into memory to avoid OOM.
             const nativePath: string = res.filePath;
             const fileSize: number   = res.fileSize ?? 0;
@@ -1916,7 +1778,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           let fileSizeBytes: number;
 
           if (res.filePath && !(res.bytes?.byteLength > 0)) {
-            // Android fast path: file already on disk.
+            // Ruta rápida: el archivo ya está en disco.
             // Register a 0-byte placeholder so addFiles creates the library entry,
             // then immediately overwrite IDB (fileBlob → undefined, filePath → native
             // path) so the loading logic uses convertFileUri(filePath) on restart.
@@ -2225,8 +2087,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   // ── Auto-scan library ────────────────────────────────────────────────────────
   const autoScanLibrary = useCallback(async (manual = false) => {
     if (!platformAPI?.scanLibrary) return;
-    // On non-Android platforms we also need readFile for byte reading
-    if (currentPlatform !== 'android' && !platformAPI?.readFile) return;
+    if (!platformAPI?.readFile) return;
     setIsScanning(true);
     setScanStatus(null);
     if (scanStatusTimerRef.current) clearTimeout(scanStatusTimerRef.current);
@@ -2265,83 +2126,23 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       }
       // Add new tracks
       let added = 0;
-      if (currentPlatform === 'android') {
-        // Android: use MediaStore metadata directly — never read file bytes during scan
-        const MIME: Record<string, string> = {
-          mp3: "audio/mpeg", flac: "audio/flac", wav: "audio/wav",
-          m4a: "audio/mp4",  ogg: "audio/ogg",  aac: "audio/aac",
-          opus: "audio/opus", wma: "audio/x-ms-wma",
-        };
-        const now = Date.now();
-        const newAndroidTracks: Track[] = [];
-        for (const [id, info] of toAdd) {
-          try {
-            const storedMeta = await getTrackMetadata(id);
-            const addedAt = storedMeta?.addedAt ?? now;
-            const playCount = storedMeta?.playCount ?? 0;
-            const lastPlayedAt = storedMeta?.lastPlayedAt;
-            const liked = storedMeta?.liked ?? false;
-            const ext = info.name.split(".").pop()?.toLowerCase() ?? "";
-            const mimeType = MIME[ext] ?? "audio/mpeg";
-            const playbackUrl = convertFileUri(info.path);
-            const placeholderFile = new File([], info.name, { type: mimeType });
-            newAndroidTracks.push({
-              id,
-              file: placeholderFile,
-              url: playbackUrl,
-              path: info.path,   // content:// URI — used by MediaMetadataRetriever for album art
-              title: storedMeta?.customTitle ?? info.title ?? info.name.replace(/\.[^/.]+$/, ""),
-              artist: storedMeta?.customArtist ?? info.artist ?? "Unknown Artist",
-              album: storedMeta?.customAlbum ?? info.album ?? "Unknown Album",
-              year: storedMeta?.customYear,
-              genre: storedMeta?.customGenre,
-              duration: storedMeta?.metaDuration ?? info.durationSecs ?? 0,
-              addedAt,
-              playCount,
-              lastPlayedAt,
-              liked,
-            });
-            added++;
-            await saveStoredTrack(id, {
-              filePath: info.path,
-              fileName: info.name,
-              fileType: mimeType,
-              fileSize: info.size,
-              addedAt,
-              metaTitle: info.title,
-              metaArtist: info.artist,
-              metaAlbum: info.album,
-              metaDuration: info.durationSecs,
-              playCount,
-              lastPlayedAt,
-            });
-          } catch (_) {}
-        }
-        if (newAndroidTracks.length > 0) {
-          setTracks(prev => {
-            const have = new Set(prev.map(t => t.id));
-            return [...prev, ...newAndroidTracks.filter(t => !have.has(t.id))];
-          });
-        }
-      } else {
-        // Desktop: read file bytes and store blobs in IDB
-        const newFiles: File[] = [];
-        for (const [, info] of toAdd) {
-          try {
-            const result = await platformAPI!.readFile!(info.path);
-            const blob = new Blob([result.bytes.buffer as ArrayBuffer]);
-            const ext = info.name.split(".").pop()?.toLowerCase() ?? "";
-            const MIME: Record<string, string> = {
-              mp3: "audio/mpeg", flac: "audio/flac", wav: "audio/wav",
-              m4a: "audio/mp4",  ogg: "audio/ogg",  aac: "audio/aac",
-              opus: "audio/opus", wma: "audio/x-ms-wma",
-            };
-            newFiles.push(new File([blob], info.name, { type: MIME[ext] ?? "audio/mpeg" }));
-            added++;
-          } catch (_) {}
-        }
-        if (newFiles.length > 0) await addFiles(newFiles);
+      // Desktop: read file bytes and store blobs in IDB
+      const newFiles: File[] = [];
+      for (const [, info] of toAdd) {
+        try {
+          const result = await platformAPI!.readFile!(info.path);
+          const blob = new Blob([result.bytes.buffer as ArrayBuffer]);
+          const ext = info.name.split(".").pop()?.toLowerCase() ?? "";
+          const MIME: Record<string, string> = {
+            mp3: "audio/mpeg", flac: "audio/flac", wav: "audio/wav",
+            m4a: "audio/mp4",  ogg: "audio/ogg",  aac: "audio/aac",
+            opus: "audio/opus", wma: "audio/x-ms-wma",
+          };
+          newFiles.push(new File([blob], info.name, { type: MIME[ext] ?? "audio/mpeg" }));
+          added++;
+        } catch (_) {}
       }
+      if (newFiles.length > 0) await addFiles(newFiles);
 
       // ── Persist file paths & sync game playlists ──────────────────────────────
       // Save filePath for every newly scanned track.
@@ -2366,77 +2167,75 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
             : t,
         ));
       }
-      // Game soundtrack detection — desktop only (Android paths are never game store paths)
-      if (currentPlatform !== 'android') {
-        // Build a complete id → path map from scan results + IDB fallback.
-        const allPaths = new Map<string, string>();
-        for (const [id, info] of foundMap) allPaths.set(id, info.path);
-        for (const s of storedTracks) {
-          if (s.filePath && !allPaths.has(s.id)) allPaths.set(s.id, s.filePath);
+      // Detección de bandas sonoras de juegos
+      // Build a complete id → path map from scan results + IDB fallback.
+      const allPaths = new Map<string, string>();
+      for (const [id, info] of foundMap) allPaths.set(id, info.path);
+      for (const s of storedTracks) {
+        if (s.filePath && !allPaths.has(s.id)) allPaths.set(s.id, s.filePath);
+      }
+      // Detect game groups: gameName → [trackId, ...]
+      const gameGroups = new Map<string, string[]>();
+      for (const [id, fp] of allPaths) {
+        const gameName = detectGameFromPath(fp);
+        if (gameName) {
+          const list = gameGroups.get(gameName) ?? [];
+          list.push(id);
+          gameGroups.set(gameName, list);
         }
-        // Detect game groups: gameName → [trackId, ...]
-        const gameGroups = new Map<string, string[]>();
-        for (const [id, fp] of allPaths) {
-          const gameName = detectGameFromPath(fp);
-          if (gameName) {
-            const list = gameGroups.get(gameName) ?? [];
-            list.push(id);
-            gameGroups.set(gameName, list);
+      }
+      if (gameGroups.size > 0) {
+        let gameRegistry: Record<string, string> = {};
+        try {
+          gameRegistry = JSON.parse(localStorage.getItem("game-playlist-registry") ?? "{}");
+        } catch (_) {}
+        const storedPls = await getAllStoredPlaylists();
+        const storedPlMap = new Map(storedPls.map(p => [p.id, p]));
+        const plUpdates: Playlist[] = [];
+        for (const [gameName, trackIds] of gameGroups) {
+          let playlistId = gameRegistry[gameName];
+          let storedPl = playlistId ? storedPlMap.get(playlistId) : undefined;
+          if (!storedPl) {
+            const now = Date.now();
+            playlistId = makeId("pl");
+            storedPl = {
+              id: playlistId,
+              name: `🎮 ${gameName}`,
+              trackIds: [],
+              createdAt: now,
+              updatedAt: now,
+            };
+            gameRegistry[gameName] = playlistId;
           }
-        }
-        if (gameGroups.size > 0) {
-          let gameRegistry: Record<string, string> = {};
-          try {
-            gameRegistry = JSON.parse(localStorage.getItem("game-playlist-registry") ?? "{}");
-          } catch (_) {}
-          const storedPls = await getAllStoredPlaylists();
-          const storedPlMap = new Map(storedPls.map(p => [p.id, p]));
-          const plUpdates: Playlist[] = [];
-          for (const [gameName, trackIds] of gameGroups) {
-            let playlistId = gameRegistry[gameName];
-            let storedPl = playlistId ? storedPlMap.get(playlistId) : undefined;
-            if (!storedPl) {
-              const now = Date.now();
-              playlistId = makeId("pl");
-              storedPl = {
-                id: playlistId,
-                name: `🎮 ${gameName}`,
-                trackIds: [],
-                createdAt: now,
-                updatedAt: now,
-              };
-              gameRegistry[gameName] = playlistId;
-            }
-            const have = new Set(storedPl.trackIds);
-            const additions = trackIds.filter(id => !have.has(id));
-            if (additions.length > 0 || !storedPlMap.has(playlistId)) {
-              const updated = {
-                ...storedPl,
-                trackIds: [...storedPl.trackIds, ...additions],
-                updatedAt: Date.now(),
-              };
-              await saveStoredPlaylist(updated);
-              plUpdates.push({
-                id: updated.id,
-                name: updated.name,
-                trackIds: updated.trackIds,
-                createdAt: updated.createdAt,
-                updatedAt: updated.updatedAt,
-              });
-            }
-          }
-          if (plUpdates.length > 0) {
-            setPlaylists(prev => {
-              const map = new Map(prev.map(p => [p.id, p]));
-              for (const upd of plUpdates) {
-                const existing = map.get(upd.id);
-                map.set(upd.id, { ...upd, customCoverUrl: existing?.customCoverUrl });
-              }
-              return [...map.values()].sort((a, b) => a.createdAt - b.createdAt);
+          const have = new Set(storedPl.trackIds);
+          const additions = trackIds.filter(id => !have.has(id));
+          if (additions.length > 0 || !storedPlMap.has(playlistId)) {
+            const updated = {
+              ...storedPl,
+              trackIds: [...storedPl.trackIds, ...additions],
+              updatedAt: Date.now(),
+            };
+            await saveStoredPlaylist(updated);
+            plUpdates.push({
+              id: updated.id,
+              name: updated.name,
+              trackIds: updated.trackIds,
+              createdAt: updated.createdAt,
+              updatedAt: updated.updatedAt,
             });
           }
-          localStorage.setItem("game-playlist-registry", JSON.stringify(gameRegistry));
         }
+        if (plUpdates.length > 0) {
+          setPlaylists(prev => {
+            const map = new Map(prev.map(p => [p.id, p]));
+            for (const upd of plUpdates) {
+              const existing = map.get(upd.id);
+              map.set(upd.id, { ...upd, customCoverUrl: existing?.customCoverUrl });
+            }
+            return [...map.values()].sort((a, b) => a.createdAt - b.createdAt);
+          });
+        }
+        localStorage.setItem("game-playlist-registry", JSON.stringify(gameRegistry));
       }
 
       // Update scan registry with current disk snapshot
@@ -2557,7 +2356,6 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       setMiniMode,
       fsVizOpen,
       setFsVizOpen,
-      playEphemeral,
       skipBackSecs,
       skipForwardSecs,
       setSkipBackSecs,
@@ -2646,7 +2444,6 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       setMiniMode,
       fsVizOpen,
       setFsVizOpen,
-      playEphemeral,
       skipBackSecs,
       skipForwardSecs,
       setSkipBackSecs,

@@ -47,13 +47,12 @@ function _isSafeRemoteUrl(urlStr) {
  * True if the resolved path is within a set of permitted base directories.
  * Blocks access to system paths even when no traversal sequences are present
  * (e.g. an absolute path like "/etc/passwd" or "/home/user/.ssh/id_rsa").
- * Allowed bases: home directory, OS temp dir, and Linux external-drive mount points.
+ * Allowed bases: home directory and OS temp dir.
  */
 let _allowedBaseDirs = null;
 function _getAllowedBaseDirs() {
   if (_allowedBaseDirs) return _allowedBaseDirs;
   _allowedBaseDirs = [os.homedir(), os.tmpdir()];
-  if (process.platform === "linux") _allowedBaseDirs.push("/media", "/mnt", "/run/media");
   return _allowedBaseDirs;
 }
 function _isAllowedPath(p) {
@@ -62,15 +61,6 @@ function _isAllowedPath(p) {
   return _getAllowedBaseDirs().some(
     (base) => resolved === base || resolved.startsWith(base + path.sep),
   );
-}
-
-// ── Sandbox flags are only needed on Linux (SUID sandbox is unavailable there).
-// On Windows these switches are unnecessary and removed to avoid any side-effects.
-if (process.platform === "linux") {
-  app.commandLine.appendSwitch("no-sandbox");
-  app.commandLine.appendSwitch("disable-gpu-sandbox");
-  app.commandLine.appendSwitch("disable-setuid-sandbox");
-  app.commandLine.appendSwitch("disable-dev-shm-usage");
 }
 
 // ── Single-instance lock ──────────────────────────────────────────────────────
@@ -94,95 +84,10 @@ app.on("second-instance", () => {
 });
 
 // ── Pin userData path ─────────────────────────────────────────────────────────
-// Linux: ~/.config/splayer  |  Windows: %APPDATA%\Splayer
-const USERDATA_DIR = process.platform === "win32"
-  ? path.join(os.homedir(), "AppData", "Roaming", "Splayer")
-  : path.join(os.homedir(), ".config", "splayer");
-
-// All previous locations this app may have stored data in, most-preferred first.
-// "Music Player"  → original productName default
-// "Splayer"       → after the first rename (Electron default, capital S)
-// "music-player"  → possible alternate casing
-const OLD_DATA_DIRS = [
-  path.join(os.homedir(), ".config", "Music Player"),
-  path.join(os.homedir(), ".config", "Splayer"),
-  path.join(os.homedir(), ".config", "music-player"),
-];
+// Windows: %APPDATA%\Splayer
+const USERDATA_DIR = path.join(os.homedir(), "AppData", "Roaming", "Splayer");
 
 app.setPath("userData", USERDATA_DIR);
-if (process.platform === "linux") app.setName("Splayer");
-
-// Migration is Linux-only — Windows installs are always fresh.
-(process.platform === "linux") && (function migrateUserData() {
-  const fsSync = require("fs");
-  const logPath = path.join(os.homedir(), ".config", "splayer-migration.log");
-
-  function log(msg) {
-    const line = `[${new Date().toISOString()}] ${msg}\n`;
-    try {
-      let size = 0;
-      try { size = fsSync.statSync(logPath).size; } catch {}
-      if (size < 1024 * 1024) fsSync.appendFileSync(logPath, line);
-    } catch (_) {}
-    console.log("[splayer]", msg);
-  }
-
-  // "Real data" = IndexedDB folder exists and is non-empty.
-  // Electron creates an empty Default/ skeleton on first launch; that doesn't count.
-  function hasRealData(dir) {
-    try {
-      // Check for Local Storage directly in dir (no Default/ subfolder on this build)
-      const lsDir = path.join(dir, "Local Storage");
-      if (fsSync.existsSync(lsDir)) {
-        const entries = fsSync.readdirSync(lsDir);
-        log(`  Local Storage at ${lsDir}: [${entries.join(", ")}]`);
-        if (entries.length > 0) return true;
-      }
-      // Fallback: also accept Default/IndexedDB for any future Chromium-profile layout
-      const idbDir = path.join(dir, "Default", "IndexedDB");
-      if (!fsSync.existsSync(idbDir)) { log(`  no Local Storage or IndexedDB at ${dir}`); return false; }
-      const entries = fsSync.readdirSync(idbDir);
-      log(`  IndexedDB at ${idbDir}: [${entries.join(", ")}]`);
-      return entries.length > 0;
-    } catch (e) { log(`  error reading ${dir}: ${e.message}`); return false; }
-  }
-
-  log(`=== Splayer startup ===`);
-  log(`USERDATA_DIR: ${USERDATA_DIR}`);
-  log(`Checking destination for real data...`);
-  if (hasRealData(USERDATA_DIR)) { log("Destination has data — no migration needed."); return; }
-
-  log("Destination is empty. Scanning old locations...");
-  for (const oldDir of OLD_DATA_DIRS) {
-    log(`Checking: ${oldDir}`);
-    if (!fsSync.existsSync(oldDir)) { log("  does not exist, skipping."); continue; }
-    if (!hasRealData(oldDir)) { log("  exists but has no real data, skipping."); continue; }
-
-    log(`Found data in: ${oldDir}. Migrating → ${USERDATA_DIR}`);
-    try {
-      // Wipe the empty skeleton first so we get a clean target.
-      if (fsSync.existsSync(USERDATA_DIR)) {
-        log("  Removing empty destination skeleton...");
-        fsSync.rmSync(USERDATA_DIR, { recursive: true, force: true });
-      }
-      // Try rename first (instant, atomic, same filesystem).
-      try {
-        fsSync.renameSync(oldDir, USERDATA_DIR);
-        log("  renameSync succeeded.");
-      } catch (renameErr) {
-        // Falls back to full copy if rename crosses device boundaries.
-        log(`  renameSync failed (${renameErr.message}), trying cpSync...`);
-        fsSync.cpSync(oldDir, USERDATA_DIR, { recursive: true });
-        log("  cpSync succeeded.");
-      }
-      log("Migration complete.");
-    } catch (e) {
-      log(`MIGRATION FAILED: ${e.message}`);
-    }
-    return;
-  }
-  log("No old data found in any known location. Starting fresh.");
-})();
 
 // ── Tray & close-behavior state ───────────────────────────────────────────────
 let mainWindow   = null;
@@ -348,82 +253,6 @@ public class WheelHook {
   }
 }
 
-// ── D-Bus scroll monitor (Linux / KDE Plasma) ────────────────────────────────
-// KDE sends a Scroll(delta, orientation) D-Bus method call to the app's
-// StatusNotifierItem service when the user scrolls over the tray icon.
-// Electron's Tray API doesn't expose this on Linux, so we intercept it by
-// spawning `dbus-monitor --monitor` (ships with every Linux D-Bus install).
-// --monitor uses BecomeMonitor under the hood — no root or eavesdrop needed.
-function setupTrayScrollMonitor() {
-  if (process.platform !== "linux") return;
-  try {
-    const monitor = spawn("dbus-monitor", [
-      "--session",
-      "--monitor",
-      "type='method_call',member='Scroll'",
-    ], { stdio: ["ignore", "pipe", "ignore"] });
-
-    let buf = "";
-    let expectDelta = false;
-    let pendingDelta = null;
-    let expectOrientation = false;
-
-    monitor.stdout.on("data", (chunk) => {
-      buf += chunk.toString();
-      const lines = buf.split("\n");
-      buf = lines.pop(); // keep any incomplete trailing line
-
-      for (const line of lines) {
-        const t = line.trim();
-
-        // Header line: "method call ... member=Scroll"
-        if (t.includes("member=Scroll")) {
-          expectDelta = true;
-          pendingDelta = null;
-          expectOrientation = false;
-          continue;
-        }
-
-        if (expectDelta) {
-          const m = t.match(/^int32\s+(-?\d+)$/);
-          if (m) {
-            pendingDelta = parseInt(m[1], 10);
-            expectDelta = false;
-            expectOrientation = true;
-          } else {
-            expectDelta = false; // unexpected line, reset
-          }
-          continue;
-        }
-
-        if (expectOrientation) {
-          const m = t.match(/^string\s+"(\w+)"$/);
-          if (m) {
-            const orientation = m[1].toLowerCase();
-            if (orientation === "vertical" && pendingDelta !== null && pendingDelta !== 0) {
-              adjustVolume(pendingDelta > 0 ? 5 : -5);
-            }
-          }
-          expectOrientation = false;
-          pendingDelta = null;
-        }
-      }
-    });
-
-    monitor.on("error", () => {}); // dbus-monitor not installed → silent fail
-    monitor.on("exit", (code) => {
-      if (code !== null && code !== 0) {
-        console.warn("[Tray] dbus-monitor exited with code", code);
-      }
-    });
-
-    console.log("[Tray] D-Bus scroll monitor active");
-  } catch (err) {
-    // Graceful degradation — keyboard shortcuts and menu items still work
-    console.warn("[Tray] D-Bus scroll monitor unavailable:", err.message);
-  }
-}
-
 // Shared helper used by both tray menu items and global shortcuts.
 // Clamps volume to 0-100, pushes it to the renderer, and refreshes the tray.
 function adjustVolume(delta) {
@@ -508,7 +337,7 @@ function createTray() {
   }
 }
 
-// ── Local YouTube embed / podcast stream server ───────────────────────────────
+// ── Local YouTube embed / stream server ───────────────────────────────────────
 let embedServerPort = 0;
 
 const SAFE_VIDEO_ID = /^[A-Za-z0-9_-]{1,20}$/;
@@ -600,7 +429,7 @@ const embedServer = http.createServer((req, res) => {
         try { netReq.abort(); } catch (_) {}
         try { s.end();       } catch (_) {}
       }
-      console.log(`[podcast] stream killed (track switch, videoId=${videoId})`);
+      console.log(`[stream] stream killed (track switch, videoId=${videoId})`);
     }
     _activeStreams.clear();
     res.writeHead(200, { "Content-Type": "text/plain", "Access-Control-Allow-Origin": "*" });
@@ -620,7 +449,7 @@ const embedServer = http.createServer((req, res) => {
     const t       = parseFloat(parsedUrl.searchParams.get("t") || "0");
     const streams = _activeStreams.get(vid) || [];
     if (streams.length > 0) {
-      console.log(`[podcast] stream killed at ${t.toFixed(1)} seconds`);
+      console.log(`[stream] stream killed at ${t.toFixed(1)} seconds`);
       for (const { netReq, res: s } of [...streams]) {
         try { netReq.abort(); } catch (_) {}
         try { s.end();       } catch (_) {}
@@ -741,7 +570,6 @@ function createWindow() {
   const isWin32   = process.platform === "win32";
   const saved     = isWin32 ? loadBounds() : null;
 
-  if (process.platform === "linux") app.commandLine.appendSwitch("gtk-version", "4");
   const win = new BrowserWindow({
     ...(saved || { width: 1280, height: 800 }),
     minWidth:        1280,
@@ -811,7 +639,6 @@ function createWindow() {
 
   Menu.setApplicationMenu(null);
   // Remove native titlebar on Linux
-  if (process.platform === "linux") win.setMenuBarVisibility(false);
 
   // Windows only: tell the renderer when the window is maximized / restored
   // so the custom titlebar and layout can react (e.g. update maximize button
@@ -1028,9 +855,7 @@ ipcMain.handle("yt-search", async (_event, query) => {
 const { spawn } = require("child_process");
 
 function getYtDlpCookieBrowsers() {
-  if (process.platform === "win32") return ["chrome", "edge"];
-  if (process.platform === "darwin") return ["safari", "chrome"];
-  return ["chrome", "firefox"]; // linux
+  return ["chrome", "edge"];
 }
 
 // Used only in the mweb bot-detection retry paths — NOT as a default client.
@@ -1269,50 +1094,7 @@ ipcMain.handle("yt-get-qualities", async (_event, url) => {
   }
 });
 
-// ── IPC: Podcast — fetch RSS feed ────────────────────────────────────────────
-ipcMain.handle("podcast-fetch-rss", async (_event, feedUrl) => {
-  if (!_isSafeRemoteUrl(feedUrl))
-    return { error: "Invalid feed URL" };
-  try {
-    const https = require("https");
-    const http  = require("http");
-    const xml = await new Promise((resolve, reject) => {
-      const mod = feedUrl.startsWith("https") ? https : http;
-      mod.get(feedUrl, { headers: { "User-Agent": "Splayer/1.0" } }, (res) => {
-        // Follow one redirect
-        if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
-          const redir = res.headers.location;
-          if (!_isSafeRemoteUrl(redir)) { reject(new Error("Redirect to unsafe URL blocked")); return; }
-          const mod2 = redir.startsWith("https") ? https : http;
-          mod2.get(redir, { headers: { "User-Agent": "Splayer/1.0" } }, (res2) => {
-            let data = "", size = 0;
-            res2.on("data", (c) => {
-              size += c.length;
-              if (size > _MAX_RSS_BYTES) { reject(new Error("Feed response too large")); res2.destroy(); return; }
-              data += c;
-            });
-            res2.on("end", () => resolve(data));
-            res2.on("error", reject);
-          }).on("error", reject);
-        } else {
-          let data = "", size = 0;
-          res.on("data", (c) => {
-            size += c.length;
-            if (size > _MAX_RSS_BYTES) { reject(new Error("Feed response too large")); res.destroy(); return; }
-            data += c;
-          });
-          res.on("end", () => resolve(data));
-          res.on("error", reject);
-        }
-      }).on("error", reject);
-    });
-    return { xml };
-  } catch (err) {
-    return { error: String(err.message ?? err) };
-  }
-});
-
-// ── IPC: YouTube — fetch playlist as podcast episodes ────────────────────────
+// ── IPC: YouTube — fetch playlist entries ────────────────────────────────────
 ipcMain.handle("yt-get-playlist", async (_event, url) => {
   if (!_isStr(url, 2048)) return { error: "Invalid URL" };
   try {
@@ -1345,14 +1127,6 @@ ipcMain.handle("yt-get-playlist", async (_event, url) => {
   } catch (err) {
     return { error: String(err.message ?? err) };
   }
-});
-
-// ── IPC: YouTube — get direct CDN audio URL ──────────────────────────────────
-// YouTube CDN URLs are blocked when set directly as audio.src in the renderer.
-// Return an error so callers fall back to the /stream proxy (which uses
-// net.request in the main process and has no such restriction).
-ipcMain.handle("yt-get-audio-url", async (_event, _videoId) => {
-  return { error: "use stream proxy" };
 });
 
 // ── IPC: YouTube — fetch video info (via yt-dlp) ────────────────────────────
@@ -2679,11 +2453,11 @@ ipcMain.handle("open-external", (_event, url) => {
   if (_isSafeRemoteUrl(url)) shell.openExternal(url);
 });
 
-// ── OS Media Integration (MPRIS on Linux, SMTC on Windows) ───────────────────
+// ── OS Media Integration (SMTC on Windows) ───────────────────────────────────
 
 let _osMediaEnabled = true;  // can be toggled from Settings
 
-// Temp file path used to pass album art to MPRIS / SMTC via file:// URL
+// Temp file path used to pass album art to SMTC via file:// URL
 const OS_MEDIA_ART_PATH = path.join(os.tmpdir(), "splayer-os-art.jpg");
 
 // Interpolated-position helpers so D-Bus clients get a live position
@@ -2696,46 +2470,6 @@ function _osCurrentPositionUs() {
   if (!_osIsPlaying) return _osLastPositionUs;
   const elapsed = Date.now() - _osLastPositionAt; // ms
   return Math.max(0, _osLastPositionUs + elapsed * 1000);
-}
-
-// ── MPRIS (Linux only) ────────────────────────────────────────────────────────
-let _mprisPlayer = null;
-
-if (process.platform === "linux") {
-  try {
-    const mpris = require("mpris-service");
-    _mprisPlayer = mpris({
-      name:                 "Splayer",
-      identity:             "Splayer",
-      supportedUriSchemes:  ["file"],
-      supportedMimeTypes:   ["audio/mpeg", "audio/flac", "audio/wav", "audio/x-m4a", "audio/ogg"],
-      supportedInterfaces:  ["player"],
-    });
-
-    _mprisPlayer.getPosition = () => _osCurrentPositionUs();
-
-    const _mprisRelay = (action) => {
-      if (!_osMediaEnabled || !mainWindow) return;
-      mainWindow.webContents.send("tray-action", action);
-    };
-    _mprisPlayer.on("play",      () => _mprisRelay("play"));
-    _mprisPlayer.on("pause",     () => _mprisRelay("pause"));
-    _mprisPlayer.on("playpause", () => _mprisRelay("play-pause"));
-    _mprisPlayer.on("stop",      () => _mprisRelay("stop"));
-    _mprisPlayer.on("next",      () => _mprisRelay("next"));
-    _mprisPlayer.on("previous",  () => _mprisRelay("prev"));
-    _mprisPlayer.on("seek",      (offsetUs) => {
-      if (!_osMediaEnabled || !mainWindow) return;
-      const newSec = Math.max(0, (_osCurrentPositionUs() + offsetUs) / 1e6);
-      mainWindow.webContents.send("tray-action", { type: "seek", position: newSec });
-    });
-
-    _mprisPlayer.playbackStatus = "Stopped";
-    console.log("[MPRIS] Service started");
-  } catch (e) {
-    console.warn("[MPRIS] Failed to start:", e.message);
-    _mprisPlayer = null;
-  }
 }
 
 // ── SMTC (Windows only) ───────────────────────────────────────────────────────
@@ -2771,7 +2505,7 @@ function _updateOsMediaState(state) {
   _osLastPositionUs  = Math.round((positionSecs || 0) * 1e6);
   _osLastPositionAt  = Date.now();
 
-  // Save album art to temp file so MPRIS/SMTC can load it via file:// URL
+  // Save album art to temp file so SMTC can load it via file:// URL
   let artUrl = "";
   if (coverDataUrl) {
     try {
@@ -2783,21 +2517,6 @@ function _updateOsMediaState(state) {
           : `file://${OS_MEDIA_ART_PATH}`;
       }
     } catch (_) {}
-  }
-
-  // ── Update MPRIS ──────────────────────────────────────────────────────────
-  if (_mprisPlayer) {
-    try {
-      _mprisPlayer.playbackStatus = isPlaying ? "Playing" : "Paused";
-      _mprisPlayer.metadata = {
-        "mpris:trackid": _mprisPlayer.objectPath("track/1"),
-        "mpris:length":  Math.round((durationSecs || 0) * 1e6),
-        "xesam:title":   title  || "",
-        "xesam:artist":  [artist || ""],
-        "xesam:album":   album  || "",
-        "mpris:artUrl":  artUrl,
-      };
-    } catch (e) { console.warn("[MPRIS] metadata update failed:", e.message); }
   }
 
   // ── Update SMTC ───────────────────────────────────────────────────────────
@@ -2822,7 +2541,6 @@ ipcMain.on("update-os-media", (_event, state) => {
 ipcMain.on("set-os-media-enabled", (_event, enabled) => {
   _osMediaEnabled = Boolean(enabled);
   if (!_osMediaEnabled) {
-    try { if (_mprisPlayer) _mprisPlayer.playbackStatus = "Stopped"; } catch (_) {}
     try { if (_smtcPlayer)  _smtcPlayer.updateSMTC?.({ playbackStatus: "Stopped" }); } catch (_) {}
   }
   console.log("[OsMedia] enabled:", _osMediaEnabled);
@@ -2899,12 +2617,6 @@ function _drpcConnect() {
   const client = new DiscordRPC.Client({ transport: "ipc" });
   _drpcConnecting = true;
 
-  // On Linux the Discord socket lives in $XDG_RUNTIME_DIR, not /tmp/.
-  // Set it explicitly so discord-rpc finds the correct path.
-  if (process.platform === "linux" && !process.env.XDG_RUNTIME_DIR) {
-    process.env.XDG_RUNTIME_DIR = `/run/user/${process.getuid()}`;
-  }
-
   client.login({ clientId: DISCORD_CLIENT_ID })
     .then(() => {
       _drpcConnecting = false;
@@ -2924,7 +2636,8 @@ function _drpcConnect() {
     .catch((err) => {
       _drpcConnecting = false;
       console.log("[Discord RPC] connect failed:", err.message);
-      try { client.destroy(); } catch {}
+      // destroy() devuelve una promesa que falla si Discord no está abierto
+      try { Promise.resolve(client.destroy()).catch(() => {}); } catch {}
       _drpcScheduleReconnect();
     });
 }
@@ -3177,8 +2890,6 @@ app.whenReady().then(() => {
   // Keep yt-dlp current — runs async, does not block startup
   _ytDlpSelfUpdate();
 
-  // D-Bus scroll monitor — intercepts KDE's Scroll method calls on Linux
-  setupTrayScrollMonitor();
   setupWindowsTrayScrollMonitor();
 
   // Global shortcuts are registered by the renderer on mount (reads user's saved bindings).

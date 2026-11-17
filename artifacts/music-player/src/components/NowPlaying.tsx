@@ -12,7 +12,7 @@ import { FullscreenVisualizer } from "./FullscreenVisualizer";
 import { LyricsPanel } from "./LyricsPanel";
 import { FloatingVideoPlayer } from "./FloatingVideoPlayer";
 import { cn } from "@/lib/utils";
-import { currentPlatform, convertFileUri } from "@/lib/platform-api";
+import { convertFileUri } from "@/lib/platform-api";
 import { useTheme } from "@/lib/theme-context";
 import { extractAlbumColors } from "@/lib/album-colors";
 import { buildUserThemeVars } from "@/lib/themes";
@@ -64,7 +64,6 @@ export function NowPlaying() {
   const [noVideoTip, setNoVideoTip] = useState(false);
   const noVideoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const isAndroid = currentPlatform === "android";
   const { songColorTheme, applySongTheme } = useTheme();
 
   // ── Inline A/V toggle ────────────────────────────────────────────────
@@ -151,9 +150,7 @@ export function NowPlaying() {
     v.load();
 
     // 2. Set new source and begin buffering.
-    // For Android-downloaded merged videos the track URL is a zero-byte blob
-    // placeholder; the real file is at videoPath. Use Capacitor.convertFileSrc
-    // so Android WebView can access the native file path.
+    // Si la pista guarda la ruta del vídeo en videoPath, se usa esa ruta.
     v.src = (matchingVideoTrack as any).videoPath
         ? convertFileUri((matchingVideoTrack as any).videoPath)
         : matchingVideoTrack.url;
@@ -314,12 +311,12 @@ export function NowPlaying() {
   return (
     <div className={cn(
       "flex-1 w-full relative overflow-hidden flex flex-col items-center justify-center py-4 md:py-12",
-      isAndroid && videoMode ? "px-0" : isAndroid ? "px-4" : "px-8",
+      "px-8",
     )}>
 
       {/* Blurred album-art background — desktop: only rendered in video mode so the
            wallpaper shows through the player area when no video is playing */}
-      {(isAndroid || videoMode) && <AnimatePresence mode="sync">
+      {videoMode && <AnimatePresence mode="sync">
         <motion.div
           key={currentTrack.id + "-bg"}
           initial={{ opacity: 0 }}
@@ -354,7 +351,7 @@ export function NowPlaying() {
        * The video element lives here and is never unmounted on track change.
        * Only the album art and track info animate independently.
        */}
-      <div className={cn("flex flex-col items-center gap-4 md:gap-8 w-full", !isAndroid && "max-w-md")}>
+      <div className="flex flex-col items-center gap-4 md:gap-8 w-full max-w-md">
 
         {/*
          * Media square — persists across tracks so the <video> ref is stable.
@@ -367,13 +364,7 @@ export function NowPlaying() {
          *   z:5  lyrics overlay / fetch-art modal
          */}
         <div className="relative mx-auto group flex-shrink-0"
-             style={isAndroid ? {
-               width:        "100%",
-               aspectRatio:  videoMode ? "16/11" : "1",
-               overflow:     "hidden",
-               borderRadius: videoMode ? "0" : "1rem",
-               transform:    "translateZ(0)",
-             } : videoMode ? {
+             style={videoMode ? {
                position:       "absolute",
                top:            0,
                right:          0,
@@ -396,7 +387,7 @@ export function NowPlaying() {
           {/* z:1 — inline video (persistent) OR album art (animated per track).
                Tapping the art on mobile opens the action overlay. */}
           <div
-            style={!isAndroid && videoMode && !matchingVideoTrack
+            style={videoMode && !matchingVideoTrack
               ? { position: "absolute", inset: 0, zIndex: 1 }
               : { position: "relative", zIndex: 1 }}
             onClick={() => { if (!videoMode) setArtActionsOpen(v => !v); }}
@@ -404,21 +395,17 @@ export function NowPlaying() {
           >
             {videoMode && matchingVideoTrack ? (
               <div
-                className={cn(isAndroid ? "w-full bg-black overflow-hidden" : "max-w-full max-h-full")}
-                style={isAndroid ? { aspectRatio: "16/11" } : undefined}
+                className="max-w-full max-h-full"
               >
                 <video
                   ref={videoRef}
                   muted
                   playsInline
                   preload="auto"
-                  className={isAndroid ? "w-full h-full" : ""}
-                  style={isAndroid
-                    ? { display: "block", objectFit: "contain", objectPosition: "center center", backgroundColor: "black" }
-                    : { display: "block", maxWidth: "100%", maxHeight: "100%", width: "auto", height: "auto" }}
+                  style={{ display: "block", maxWidth: "100%", maxHeight: "100%", width: "auto", height: "auto" }}
                 />
               </div>
-            ) : !isAndroid && videoMode ? (
+            ) : videoMode ? (
               /* Desktop video mode, audio-only track — cover fills the full panel */
               cover
                 ? <img

@@ -30,64 +30,6 @@ export interface Playlist {
   updatedAt: number;
 }
 
-export interface Podcast {
-  id: string;
-  title: string;
-  description: string;
-  imageUrl?: string;
-  feedUrl: string;
-  addedAt: number;
-}
-
-export interface PodcastEpisode {
-  id: string;
-  podcastId: string;
-  title: string;
-  description?: string;
-  pubDate?: number;
-  duration?: number;
-  audioUrl: string;
-  guid: string;
-  played: boolean;
-  progress: number;
-  thumbnail?: string;
-}
-
-export interface Book {
-  id: string;
-  title: string;
-  author: string;
-  narrator?: string;
-  description?: string;
-  coverUrl?: string;
-  source: "local" | "youtube";
-  feedUrl?: string;
-  addedAt: number;
-  duration?: number;
-  progress?: number;
-}
-
-export interface BookChapter {
-  id: string;
-  bookId: string;
-  title: string;
-  index: number;
-  startTime?: number;
-  endTime?: number;
-  duration?: number;
-  audioUrl?: string;
-  progress: number;
-  played: boolean;
-}
-
-export interface BookBookmark {
-  id: string;
-  bookId: string;
-  time: number;
-  note: string;
-  createdAt: number;
-}
-
 export type SmartPlaylistKind =
   | "most-played"
   | "recently-added"

@@ -101,13 +101,7 @@ declare global {
       /** Returns the port of the local YouTube embed proxy server. */
       getEmbedPort: () => Promise<number>;
 
-      /** Fetch raw RSS XML for a podcast feed URL. */
-      podcastFetchRss: (url: string) => Promise<{ xml: string } | { error: string }>;
-
-      /** Get the direct CDN audio URL for a YouTube video ID (for podcast playback). */
-      ytGetAudioUrl: (videoId: string) => Promise<{ url: string } | { error: string }>;
-
-      /** Fetch a YouTube playlist as podcast episodes. */
+      /** Fetch a YouTube playlist's entries. */
       ytGetPlaylist: (url: string) => Promise<{
         title: string; description: string; thumbnail: string | null;
         entries: { id: string; title: string; duration: number | null; thumbnail: string | null; url: string }[];

@@ -1,15 +1,8 @@
 import { useState, useRef, useEffect } from "react";
-import { Browser } from "@capacitor/browser";
-import { platformAPI, currentPlatform } from "@/lib/platform-api";
-
-const isAndroid = currentPlatform === "android";
+import { platformAPI } from "@/lib/platform-api";
 
 async function openUrl(url: string) {
-  if (isAndroid) {
-    await Browser.open({ url });
-  } else {
-    (platformAPI as any)?.openExternal?.(url);
-  }
+  (platformAPI as any)?.openExternal?.(url);
 }
 import { Archive, Download, FolderOpen, Gamepad2, Monitor, Settings, Upload, PlayCircle } from "lucide-react";
 import { usePlayer } from "@/lib/player-context";
@@ -678,24 +671,22 @@ function DiscordSection() {
 
 // ── ButtonsSection ────────────────────────────────────────────────────────────
 
-type ButtonDef = { key: ButtonKey; label: string; desc: string; desktopOnly?: true };
+type ButtonDef = { key: ButtonKey; label: string; desc: string };
 
 const BUTTON_DEFS: ButtonDef[] = [
   { key: "shuffle",      label: "Shuffle",               desc: "Toggle shuffle playback mode" },
   { key: "repeat",       label: "Repeat",                desc: "Cycle through repeat modes" },
   { key: "prevTrack",    label: "Previous Track",        desc: "Skip to the previous song" },
   { key: "nextTrack",    label: "Next Track",            desc: "Skip to the next song" },
-  { key: "sleepTimer",   label: "Sleep Timer",           desc: "Set a timer to stop playback automatically", desktopOnly: true },
-  { key: "speed",        label: "Playback Speed",        desc: "Change the playback speed", desktopOnly: true },
+  { key: "sleepTimer",   label: "Sleep Timer",           desc: "Set a timer to stop playback automatically" },
+  { key: "speed",        label: "Playback Speed",        desc: "Change the playback speed" },
   { key: "crossfade",    label: "Crossfade",             desc: "Blend between tracks with a crossfade" },
-  { key: "volume",       label: "Volume",                desc: "Volume slider and mute button", desktopOnly: true },
+  { key: "volume",       label: "Volume",                desc: "Volume slider and mute button" },
   { key: "equalizer",    label: "Equalizer",             desc: "Open the EQ and audio effects panel" },
-  { key: "miniPlayer",   label: "Mini Player",           desc: "Switch to the compact player view", desktopOnly: true },
-  { key: "fsVisualizer", label: "Fullscreen Visualizer", desc: "Show the full-screen audio visualizer", desktopOnly: true },
-  { key: "lyrics",       label: "Lyrics",                desc: "Toggle the lyrics overlay on the album art", desktopOnly: true },
+  { key: "miniPlayer",   label: "Mini Player",           desc: "Switch to the compact player view" },
+  { key: "fsVisualizer", label: "Fullscreen Visualizer", desc: "Show the full-screen audio visualizer" },
+  { key: "lyrics",       label: "Lyrics",                desc: "Toggle the lyrics overlay on the album art" },
   { key: "queue",        label: "Queue",                 desc: "View and manage the playback queue" },
-  { key: "podcasts",     label: "Podcasts",              desc: "Show or hide the Podcasts tab in the library", desktopOnly: true },
-  { key: "audiobooks",   label: "Audiobooks",            desc: "Show or hide the Audiobooks tab in the library" },
 ];
 
 function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
@@ -721,7 +712,7 @@ function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
 
 function ButtonsSection() {
   const { buttonVisibility, setButtonVisibility, resetButtonVisibility } = usePlayer();
-  const visible = BUTTON_DEFS.filter((d) => !d.desktopOnly || !isAndroid);
+  const visible = BUTTON_DEFS;
 
   return (
     <div className="space-y-1 py-1">
@@ -930,49 +921,45 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
         {/* ── Behavior tab ── */}
         {tab === "behavior" && (
           <div className="py-1 space-y-5">
-            {!isAndroid && (
-              <>
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-3">
-                    App Behavior
-                  </p>
-                  <div className="space-y-5">
-                    <StartOnBootSection />
-                    <hr className="border-card-border" />
-                    <CloseBehaviorSection />
-                  </div>
-                </div>
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-3">
+                App Behavior
+              </p>
+              <div className="space-y-5">
+                <StartOnBootSection />
                 <hr className="border-card-border" />
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-3">
-                    OS Media
-                  </p>
-                  <OsMediaSection />
-                </div>
-                <hr className="border-card-border" />
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-3">
-                    Discord
-                  </p>
-                  <DiscordSection />
-                </div>
-                <hr className="border-card-border" />
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-3">
-                    Onboarding
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="gap-2"
-                    onClick={() => startTour()}
-                  >
-                    <PlayCircle className="w-4 h-4" />
-                    Take the tour
-                  </Button>
-                </div>
-              </>
-            )}
+                <CloseBehaviorSection />
+              </div>
+            </div>
+            <hr className="border-card-border" />
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-3">
+                OS Media
+              </p>
+              <OsMediaSection />
+            </div>
+            <hr className="border-card-border" />
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-3">
+                Discord
+              </p>
+              <DiscordSection />
+            </div>
+            <hr className="border-card-border" />
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-3">
+                Onboarding
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={() => startTour()}
+              >
+                <PlayCircle className="w-4 h-4" />
+                Take the tour
+              </Button>
+            </div>
           </div>
         )}
 

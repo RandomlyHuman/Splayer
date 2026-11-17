@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  BookOpen,
   ChevronDown,
   FileMusic,
   FolderOpen,
@@ -12,7 +11,6 @@ import {
   ListMusic,
   ListOrdered,
   Maximize2,
-  Mic2,
   Minimize2,
   Music,
   MoreHorizontal,
@@ -71,23 +69,18 @@ import { EqualizerBars } from "./EqualizerBars";
 import { DeleteTrackDialog } from "./DeleteTrackDialog";
 import { SelectionActionBar } from "./SelectionActionBar";
 import { JumpToCurrentButton } from "./JumpToCurrentButton";
-import { currentPlatform } from "@/lib/platform-api";
 import { showTrackInFolder } from "@/lib/show-in-folder";
 import { useTheme } from "@/lib/theme-context";
 import type { SmartPlaylistKind } from "@/lib/types";
 import { QueueView } from "./QueueView";
-import { PodcastsView } from "./PodcastsView";
-import { BooksView } from "./BooksView";
 import { DownloadQueueButton } from "./DownloadQueuePanel";
 
-type Tab = "library" | "playlists" | "queue" | "podcasts" | "books";
+type Tab = "library" | "playlists" | "queue";
 type View =
   | { kind: "library" }
   | { kind: "playlists" }
   | { kind: "playlist"; id: string }
   | { kind: "queue" }
-  | { kind: "podcasts" }
-  | { kind: "books" }
   | { kind: "smart"; smart: SmartPlaylistKind };
 
 interface PlaylistProps {
@@ -120,20 +113,14 @@ export function Playlist({
   const { buttonVisibility: bv } = usePlayer();
 
   // Tailwind grid-cols classes — computed from which tabs are currently visible
-  const GRID_COLS = ["", "", "grid-cols-2", "grid-cols-3", "grid-cols-4", "grid-cols-5"] as const;
-  const deskCount  = 2 + (bv.queue ? 1 : 0) + (bv.podcasts ? 1 : 0) + (bv.audiobooks ? 1 : 0);
-  const droidCount = 2 + (bv.queue ? 1 : 0) + (bv.audiobooks ? 1 : 0);
-  const tabColsDesktop = GRID_COLS[deskCount]  ?? "grid-cols-5";
-  const tabColsAndroid = GRID_COLS[droidCount] ?? "grid-cols-4";
+  const tabColsDesktop = bv.queue ? "grid-cols-3" : "grid-cols-2";
 
   const [view, setView] = useState<View>({ kind: "library" });
 
   // Fall back to library if the active tab becomes hidden
   useEffect(() => {
-    if (!bv.queue      && view.kind === "queue")    setView({ kind: "library" });
-    if (!bv.podcasts   && view.kind === "podcasts") setView({ kind: "library" });
-    if (!bv.audiobooks && view.kind === "books")    setView({ kind: "library" });
-  }, [bv.queue, bv.podcasts, bv.audiobooks, view.kind]);
+    if (!bv.queue && view.kind === "queue") setView({ kind: "library" });
+  }, [bv.queue, view.kind]);
 
   const { animatedTransitions, effectiveReduceMotion } = useTheme();
   const shouldAnimate = animatedTransitions && !effectiveReduceMotion;
@@ -143,95 +130,84 @@ export function Playlist({
 
   const tab: Tab = view.kind === "library" ? "library"
     : view.kind === "queue"    ? "queue"
-    : view.kind === "podcasts" ? "podcasts"
-    : view.kind === "books"    ? "books"
     : "playlists";
 
   return (
     <aside
       className={cn(
         "w-full md:w-80 lg:w-96 flex flex-col border-l border-card-border min-h-0 rounded-l-2xl overflow-hidden",
-        currentPlatform === "android"
-          ? "bg-background/60 backdrop-blur-[3px]"
-          : "bg-sidebar/40 backdrop-blur",
+        "bg-sidebar/40 backdrop-blur",
       )}
     >
-      {currentPlatform !== "android" && (
-        <div className="flex items-center justify-end px-3 py-0.5 shrink-0">
-          {onToggleMini && bv.miniPlayer && (
-            <Button
-              size="sm"
-              variant={miniMode ? "default" : "ghost"}
-              className="gap-2 mr-1"
-              onClick={onToggleMini}
-              title={miniMode ? "Return to full player (P)" : "Switch to mini player (P)"}
-            >
-              {miniMode
-                ? <><Maximize2 className="w-3.5 h-3.5" /> Full Player</>
-                : <><Minimize2 className="w-3.5 h-3.5" /> Mini Player</>}
+      <div className="flex items-center justify-end px-3 py-0.5 shrink-0">
+        {onToggleMini && bv.miniPlayer && (
+          <Button
+            size="sm"
+            variant={miniMode ? "default" : "ghost"}
+            className="gap-2 mr-1"
+            onClick={onToggleMini}
+            title={miniMode ? "Return to full player (P)" : "Switch to mini player (P)"}
+          >
+            {miniMode
+              ? <><Maximize2 className="w-3.5 h-3.5" /> Full Player</>
+              : <><Minimize2 className="w-3.5 h-3.5" /> Mini Player</>}
+          </Button>
+        )}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="sm" variant="ghost" className="gap-2" data-testid="button-header-add">
+              <Upload className="w-3.5 h-3.5" />
+              Add music
+              <ChevronDown className="w-3 h-3 opacity-60" />
             </Button>
-          )}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button size="sm" variant="ghost" className="gap-2" data-testid="button-header-add">
-                <Upload className="w-3.5 h-3.5" />
-                Add music
-                <ChevronDown className="w-3 h-3 opacity-60" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={onAddFiles}>
-                <FileMusic className="w-4 h-4 mr-2" />
-                Add files...
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={onAddFolder}>
-                <FolderOpen className="w-4 h-4 mr-2" />
-                Add folder...
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={onOpenYt}>
-                <Youtube className="w-4 h-4 mr-2 text-red-500" />
-                From YouTube...
-              </DropdownMenuItem>
-              {currentPlatform !== "android" && (
-                <DropdownMenuItem onClick={onOpenSpotify}>
-                  <span className="w-4 h-4 mr-2 flex items-center justify-center shrink-0">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="#1DB954" aria-hidden>
-                      <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.516 17.32a.75.75 0 0 1-1.032.25c-2.823-1.725-6.38-2.115-10.567-1.158a.75.75 0 0 1-.334-1.463c4.58-1.047 8.508-.597 11.682 1.34a.75.75 0 0 1 .251 1.031zm1.473-3.276a.937.937 0 0 1-1.288.308C14.96 12.525 11.1 12 7.2 13.062a.938.938 0 0 1-.468-1.815C11.17 10.07 15.48 10.655 18.68 12.756a.938.938 0 0 1 .309 1.288zm.126-3.408c-3.35-1.99-8.875-2.172-12.073-1.201a1.124 1.124 0 0 1-.65-2.15c3.671-1.113 9.77-.898 13.626 1.39a1.125 1.125 0 1 1-1.127 1.95l.224-.989z" />
-                    </svg>
-                  </span>
-                  From Spotify
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <DownloadQueueButton />
-          <Button size="icon" variant="ghost" onClick={onOpenAppearance}
-            className="h-8 w-8 text-muted-foreground" data-testid="button-appearance"
-            aria-label="Appearance" title="Appearance">
-            <Palette className="w-4 h-4" />
-          </Button>
-          <Button size="icon" variant="ghost" onClick={onOpenSettings}
-            className="h-8 w-8 text-muted-foreground" data-testid="button-settings"
-            aria-label="Settings" title="Settings">
-            <Settings className="w-4 h-4" />
-          </Button>
-          <Button size="icon" variant="ghost" onClick={onOpenShortcuts}
-            className="h-8 w-8 text-muted-foreground" data-testid="button-shortcuts"
-            aria-label="Shortcuts">
-            <Keyboard className="w-4 h-4" />
-          </Button>
-          {onOpenEditor && <EditorSidebarButton onOpenEditor={onOpenEditor} />}
-        </div>
-      )}
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={onAddFiles}>
+              <FileMusic className="w-4 h-4 mr-2" />
+              Add files...
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onAddFolder}>
+              <FolderOpen className="w-4 h-4 mr-2" />
+              Add folder...
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onOpenYt}>
+              <Youtube className="w-4 h-4 mr-2 text-red-500" />
+              From YouTube...
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onOpenSpotify}>
+              <span className="w-4 h-4 mr-2 flex items-center justify-center shrink-0">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="#1DB954" aria-hidden>
+                  <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.516 17.32a.75.75 0 0 1-1.032.25c-2.823-1.725-6.38-2.115-10.567-1.158a.75.75 0 0 1-.334-1.463c4.58-1.047 8.508-.597 11.682 1.34a.75.75 0 0 1 .251 1.031zm1.473-3.276a.937.937 0 0 1-1.288.308C14.96 12.525 11.1 12 7.2 13.062a.938.938 0 0 1-.468-1.815C11.17 10.07 15.48 10.655 18.68 12.756a.938.938 0 0 1 .309 1.288zm.126-3.408c-3.35-1.99-8.875-2.172-12.073-1.201a1.124 1.124 0 0 1-.65-2.15c3.671-1.113 9.77-.898 13.626 1.39a1.125 1.125 0 1 1-1.127 1.95l.224-.989z" />
+                </svg>
+              </span>
+              From Spotify
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <DownloadQueueButton />
+        <Button size="icon" variant="ghost" onClick={onOpenAppearance}
+          className="h-8 w-8 text-muted-foreground" data-testid="button-appearance"
+          aria-label="Appearance" title="Appearance">
+          <Palette className="w-4 h-4" />
+        </Button>
+        <Button size="icon" variant="ghost" onClick={onOpenSettings}
+          className="h-8 w-8 text-muted-foreground" data-testid="button-settings"
+          aria-label="Settings" title="Settings">
+          <Settings className="w-4 h-4" />
+        </Button>
+        <Button size="icon" variant="ghost" onClick={onOpenShortcuts}
+          className="h-8 w-8 text-muted-foreground" data-testid="button-shortcuts"
+          aria-label="Shortcuts">
+          <Keyboard className="w-4 h-4" />
+        </Button>
+        {onOpenEditor && <EditorSidebarButton onOpenEditor={onOpenEditor} />}
+      </div>
       <div className={cn(
-        "pt-0 pb-1 border-b border-card-border",
-        currentPlatform !== "android" && "px-3",
+        "pt-0 pb-1 border-b border-card-border px-3",
       )}>
         <div className={cn(
           "grid gap-0 bg-muted/40",
-          currentPlatform === "android"
-            ? cn(tabColsAndroid, "py-1")
-            : cn(tabColsDesktop, "gap-1 p-1 rounded-md"),
+          cn(tabColsDesktop, "gap-1 p-1 rounded-md"),
         )}>
           <button
             type="button"
@@ -277,38 +253,6 @@ export function Playlist({
               Queue
             </button>
           )}
-          {currentPlatform !== "android" && bv.podcasts && (
-            <button
-              type="button"
-              onClick={() => setView({ kind: "podcasts" })}
-              className={cn(
-                "flex items-center justify-center gap-1 text-xs h-7 rounded transition-colors",
-                tab === "podcasts"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-              data-testid="tab-podcasts"
-            >
-              <Mic2 className="w-3 h-3" />
-              Pods
-            </button>
-          )}
-          {bv.audiobooks && (
-            <button
-              type="button"
-              onClick={() => setView({ kind: "books" })}
-              className={cn(
-                "flex items-center justify-center gap-1 text-xs h-7 rounded transition-colors",
-                tab === "books"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-              data-testid="tab-books"
-            >
-              <BookOpen className="w-3 h-3" />
-              Books
-            </button>
-          )}
         </div>
       </div>
 
@@ -323,8 +267,6 @@ export function Playlist({
         >
           {view.kind === "library" && <LibraryView onOpenEditor={onOpenEditor} />}
           {view.kind === "queue" && <QueueView />}
-          {view.kind === "podcasts" && <PodcastsView />}
-          {view.kind === "books" && <BooksView />}
           {view.kind === "playlists" && (
             <PlaylistsView
               onOpenPlaylist={(p) => setView({ kind: "playlist", id: p.id })}

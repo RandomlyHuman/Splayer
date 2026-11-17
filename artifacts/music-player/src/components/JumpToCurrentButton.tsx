@@ -1,7 +1,5 @@
 import { Crosshair } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { currentPlatform } from "@/lib/platform-api";
-import { usePlayer } from "@/lib/player-context";
 
 interface Props {
   onClick: () => void;
@@ -11,17 +9,10 @@ interface Props {
 }
 
 export function JumpToCurrentButton({ onClick, visible, elevated = false }: Props) {
-  const { miniMode } = usePlayer();
 
   if (!visible) return null;
 
-  // On Android in mini-mode the MiniPlayer card sits 24 px from the bottom and
-  // is 80 px tall, so its top edge is 104 px from the bottom.  Add a 12 px gap
-  // → 116 px.  When the SelectionActionBar is also visible, add another 48 px.
-  const androidMini = currentPlatform === "android" && miniMode;
-  const bottomClass = androidMini
-    ? (elevated ? "bottom-[164px]" : "bottom-[116px]")
-    : (elevated ? "bottom-[52px]"  : "bottom-3");
+  const bottomClass = elevated ? "bottom-[52px]" : "bottom-3";
 
   return (
     <button

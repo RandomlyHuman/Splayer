@@ -30,8 +30,6 @@ import { usePlayer } from "@/lib/player-context";
 import { formatTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { EQPanel } from "./EQPanel";
-import { currentPlatform } from "@/lib/platform-api";
-import { AndroidEQPanel } from "./AndroidEQPanel";
 import { WaveformScrubber } from "./WaveformScrubber";
 
 function useSleepTimer(onExpire: () => void) {
@@ -222,7 +220,6 @@ function SkipButton({
 }
 
 export function PlayerControls() {
-  const [androidEQOpen, setAndroidEQOpen] = useState(false);
   const {
     currentTrack,
     isPlaying,
@@ -280,11 +277,8 @@ export function PlayerControls() {
         data-testid="player-controls"
         className={cn(
           "border-t border-card-border px-4 py-3",
-          currentPlatform === "android" ? "relative z-10 bg-card" : "bg-card/60 backdrop-blur",
+          "bg-card/60 backdrop-blur",
         )}
-        style={currentPlatform === "android"
-          ? { backgroundColor: "hsl(var(--card) / 1)" }
-          : undefined}
       >
         <div className="flex items-center gap-4">
           {/* Left: track info + heart */}
@@ -426,67 +420,6 @@ export function PlayerControls() {
               </span>
             </div>
 
-            {/* Android-only second row: EQ + crossfade */}
-            {currentPlatform === "android" && (
-              <div className="flex items-center gap-3 pt-0.5">
-                {bv.equalizer && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-8 gap-1.5 px-2 text-xs text-muted-foreground"
-                    onClick={() => setAndroidEQOpen(true)}
-                    aria-label="Open equalizer"
-                    title="Equalizer"
-                  >
-                    <SlidersHorizontal className="h-3.5 w-3.5" />
-                    EQ
-                  </Button>
-                )}
-
-                {bv.crossfade && (
-                  <button
-                    type="button"
-                    onClick={toggleCrossfade}
-                    className="flex items-center gap-1.5 text-xs text-muted-foreground h-8 px-2 shrink-0"
-                    aria-label="Toggle crossfade"
-                  >
-                    <Waves className={cn("h-3.5 w-3.5", crossfadeEnabled && "text-primary")} />
-                    <span className={crossfadeEnabled ? "text-primary" : ""}>
-                      {crossfadeEnabled ? `${crossfadeSecs}s` : "Crossfade"}
-                    </span>
-                  </button>
-                )}
-
-                {/* Native range input: reliable touch handling in Android WebView */}
-                {bv.crossfade && crossfadeEnabled && (
-                  <input
-                    type="range"
-                    min={0}
-                    max={10}
-                    step={1}
-                    value={crossfadeSecs}
-                    onChange={(e) => setCrossfadeSecs(Number(e.target.value))}
-                    className="flex-1 max-w-[110px] h-1 accent-primary cursor-pointer"
-                    aria-label="Crossfade duration"
-                  />
-                )}
-
-                <button
-                  type="button"
-                  onClick={toggleMono}
-                  className={cn(
-                    "h-8 px-2 rounded text-[11px] font-bold tracking-wider transition-colors",
-                    isMono
-                      ? "bg-primary/15 text-primary"
-                      : "text-muted-foreground",
-                  )}
-                  aria-label={isMono ? "Mono — click for stereo" : "Stereo — click for mono"}
-                  title={isMono ? "Mono" : "Stereo"}
-                >
-                  {isMono ? "MONO" : "STEREO"}
-                </button>
-              </div>
-            )}
           </div>
 
           {/* Right: EQ + lyrics + crossfade + volume */}
@@ -701,7 +634,6 @@ export function PlayerControls() {
         </div>
       </div>
 
-      <AndroidEQPanel open={androidEQOpen} onOpenChange={setAndroidEQOpen} />
     </>
   );
 }

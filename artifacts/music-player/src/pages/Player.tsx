@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { platformAPI, currentPlatform } from "@/lib/platform-api";
+import { platformAPI } from "@/lib/platform-api";
 import { ChevronDown, ChevronLeft, ChevronRight, Music, Youtube, Palette, Settings, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,7 +25,6 @@ import { useTheme } from "@/lib/theme-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { DownloadQueueButton } from "@/components/DownloadQueuePanel";
 import { EditorPage } from "@/components/EditorPage";
-import { MiniPlayer } from "@/components/MiniPlayer";
 import type { Track } from "@/lib/types";
 
 
@@ -41,9 +40,7 @@ function useWindowHeight() {
     const t2 = setTimeout(update, 800);
     return () => { window.removeEventListener("resize", update); clearTimeout(t1); clearTimeout(t2); };
   }, []);
-  // The -18 corrects KDE Linux frameless-window sizing only — not needed on Windows/macOS/Android.
-  const isLinux = currentPlatform === "electron" && platformAPI?.platform === "linux";
-  return (currentPlatform === "android" || !isLinux) ? height : height - 18;
+  return height;
 }
 
 export default function Player() {
@@ -159,7 +156,7 @@ export default function Player() {
       else if (e.key === "s" || e.key === "S") { toggleShuffle(); }
       else if (e.key === "r" || e.key === "R") { cycleRepeat(); }
       else if (e.key === "?")                  { setShortcutsOpen((o) => !o); }
-      else if ((e.key === "p" || e.key === "P") && !isAndroid) { setMiniMode((o) => !o); }
+      else if (e.key === "p" || e.key === "P") { setMiniMode((o) => !o); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -177,23 +174,19 @@ export default function Player() {
   const effectiveSidebarOpen = sidebarOpen || miniMode;
 
   const isWin32 = typeof window !== 'undefined' && platformAPI?.platform === "win32";
-  const isAndroid = currentPlatform === "android";
-  // TitleBar now renders on all non-Android Electron platforms (frame:false everywhere).
-  const hasCustomTitleBar = !isAndroid && !!platformAPI;
+  // TitleBar se muestra siempre en Electron (frame:false).
+  const hasCustomTitleBar = !!platformAPI;
 
   return (
     <div data-debug="player-root" className={cn(
       "w-full flex flex-col text-foreground overflow-hidden relative",
       // On desktop with a wallpaper active, keep the root transparent so the
       // wallpaper fills the backdrop and backdrop-filter elements show it cleanly.
-      // On Android or when no wallpaper is set, keep the solid bg-background.
-      (!wallpaper || isAndroid) && "bg-background",
+      // When no wallpaper is set, keep the solid bg-background.
+      !wallpaper && "bg-background",
     )} style={{
       height: winHeight + "px",
-      paddingTop: isAndroid ? "env(safe-area-inset-top, 0px)" : undefined,
     }}>
-      {/* Spacer for Electron TitleBar — Android only (desktop rows sit flush at top) */}
-      {false && !isAndroid && <div className="h-9 w-full shrink-0" />}
       {wallpaper && (
         <div data-debug="wallpaper" className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
           <img
@@ -206,71 +199,7 @@ export default function Player() {
       )}
 
       {/* ── Header ─────────────────────────────────────────────────────── */}
-      {isAndroid ? (
-        /* Android: single header row, unchanged */
-        <header className={cn(
-          "relative z-[1] flex items-center justify-between py-3 border-b border-card-border",
-          isAndroid ? "px-2" : "px-5",
-        )}>
-          <div className="flex items-center gap-2.5">
-            {!miniMode && hasTracks && (
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={() => setMiniMode(true)}
-                className="h-8 w-8 text-muted-foreground -ml-1 mr-0.5"
-                aria-label="Back to library"
-                title="Back to library"
-              >
-                <ChevronDown className="w-5 h-5" />
-              </Button>
-            )}
-            <div className="w-8 h-8 rounded-md flex items-center justify-center bg-primary/15 text-primary">
-              <Music className="w-4 h-4" strokeWidth={2} />
-            </div>
-            <div className="leading-tight">
-              <div className="text-sm font-serif tracking-tight">Splayer</div>
-              <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                Local listening room
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={() => setYtOpen(true)}
-              className="h-11 w-11 text-red-500"
-              aria-label="Download from YouTube"
-              title="Download from YouTube"
-            >
-              <Youtube className="w-4 h-4" />
-            </Button>
-            <DownloadQueueButton />
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={() => setAppearanceOpen(true)}
-              className="h-8 w-8 text-muted-foreground"
-              aria-label="Appearance"
-              title="Appearance"
-            >
-              <Palette className="w-4 h-4" />
-            </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={() => setSettingsOpen(true)}
-              className="h-8 w-8 text-muted-foreground"
-              aria-label="Settings"
-              title="Settings"
-            >
-              <Settings className="w-4 h-4" />
-            </Button>
-          </div>
-        </header>
-      ) : (
-        /* Desktop: two independent rows */
+      {/* Cabecera: dos filas independientes */}
         <>
           {/* Row 1 — title strip */}
           <div className="relative z-[1] flex items-center px-5 pt-3 pb-0">
@@ -308,37 +237,10 @@ export default function Player() {
           </div>
 
         </>
-      )}
 
       {/* ── Main content ───────────────────────────────────────────────── */}
       <div className="relative z-[1] flex-1 flex overflow-hidden">
-        {isAndroid ? (
-          /* Android: mini mode = library view; full mode = NowPlaying */
-          !miniMode && hasTracks ? (
-            <ErrorBoundary>
-              <NowPlaying />
-            </ErrorBoundary>
-          ) : hasTracks ? (
-            <ErrorBoundary>
-              <Playlist
-                hasTracks={hasTracks}
-                onAddFiles={() => fileRef.current?.click()}
-                onAddFolder={() => folderRef.current?.click()}
-                onOpenYt={() => setYtOpen(true)}
-                onOpenAppearance={() => setAppearanceOpen(true)}
-                onOpenSettings={() => setSettingsOpen(true)}
-                onOpenShortcuts={() => setShortcutsOpen(true)}
-
-                miniMode={miniMode}
-                onToggleMini={() => setMiniMode((m) => !m)}
-                onOpenEditor={(track) => setEditorTrack(track)}
-              />
-            </ErrorBoundary>
-          ) : (
-            <EmptyState />
-          )
-        ) : (
-          /* Desktop: primary area + collapsible sidebar */
+        {/* Área principal + barra lateral plegable */}
           <>
             {/* Primary content — NowPlaying or HomeDashboard.
                 Hosts the hover zone and the toggle chevron button. */}
@@ -423,18 +325,10 @@ export default function Player() {
               </div>
             )}
           </>
-        )}
       </div>
 
-      {/* Hide when fullscreen visualizer is open, or when MiniPlayer replaces it on Android */}
-      {!fsVizOpen && !(isAndroid && miniMode && hasTracks) && <PlayerControls />}
-
-      {/* ── Android MiniPlayer bar — shown in mini (library) mode ──────── */}
-      <AnimatePresence>
-        {isAndroid && miniMode && hasTracks && (
-          <MiniPlayer onExpand={() => setMiniMode(false)} />
-        )}
-      </AnimatePresence>
+      {/* Hide when fullscreen visualizer is open */}
+      {!fsVizOpen && <PlayerControls />}
 
       {/* ── Drag overlay ──────────────────────────────────────────────── */}
       <AnimatePresence>

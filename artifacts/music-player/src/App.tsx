@@ -8,7 +8,7 @@ import { checkAndRunAutoBackup } from "@/lib/auto-backup";
 import { TitleBar } from "@/components/TitleBar";
 import { TourOverlay, VizTip } from "@/components/TourOverlay";
 import { FloatingDownloadBadge } from "@/components/FloatingDownloadBadge";
-import { platformAPI, currentPlatform } from "@/lib/platform-api";
+import { platformAPI } from "@/lib/platform-api";
 import { trackCoverUrl } from "@/lib/types";
 
 /** Convert any cover URL (blob:, data:, http) to a data URL safe for cross-window IPC. */
@@ -205,9 +205,9 @@ function App() {
         <PlayerProvider>
           {/* Show on all Electron desktop platforms — main.cjs sets frame:false
               for every platform, so the custom titlebar is always needed. */}
-          {platformAPI && currentPlatform !== "android" && <TitleBar />}
-          {platformAPI && currentPlatform !== "android" && <TourOverlay />}
-          {platformAPI && currentPlatform !== "android" && <VizTip />}
+          {platformAPI && <TitleBar />}
+          {platformAPI && <TourOverlay />}
+          {platformAPI && <VizTip />}
           <TrayBridge />
           <Player />
           <FloatingDownloadBadge />

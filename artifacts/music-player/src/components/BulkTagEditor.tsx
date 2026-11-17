@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { platformAPI, currentPlatform } from "@/lib/platform-api";
+import { platformAPI } from "@/lib/platform-api";
 import {
   Dialog,
   DialogContent,
@@ -155,8 +155,8 @@ export function BulkTagEditor({ open, onOpenChange, initialTrackIds }: BulkTagEd
           <DialogTitle className="text-base font-semibold">Bulk Tag Editor</DialogTitle>
         </DialogHeader>
 
-        {/* ── MOBILE / Android layout (single scrollable column) ──────────────── */}
-        <div className={cn("flex-1 flex flex-col min-h-0", currentPlatform !== "android" && "md:hidden")}>
+        {/* ── Ventana estrecha (una sola columna) ───────────────────────────── */}
+        <div className="flex-1 flex flex-col min-h-0 md:hidden">
           {/* Select-all */}
           <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border bg-muted/20 shrink-0">
             <Checkbox
@@ -253,8 +253,8 @@ export function BulkTagEditor({ open, onOpenChange, initialTrackIds }: BulkTagEd
           </div>
         </div>
 
-        {/* ── DESKTOP layout (two-panel side by side) — never on Android ──────── */}
-        {currentPlatform !== "android" && <div className="flex-1 hidden md:flex flex-row min-h-0" style={{ height: "calc(90vh - 80px)", maxHeight: 600 }}>
+        {/* ── DESKTOP layout (two-panel side by side) ──────────────────────────── */}
+        {<div className="flex-1 hidden md:flex flex-row min-h-0" style={{ height: "calc(90vh - 80px)", maxHeight: 600 }}>
           {/* LEFT: track list */}
           <div className="w-56 flex flex-col border-r border-border shrink-0">
             <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border bg-muted/20">

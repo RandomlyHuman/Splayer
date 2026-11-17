@@ -18,7 +18,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { usePlayer } from "@/lib/player-context";
-import { currentPlatform } from "@/lib/platform-api";
 import type { Playlist, Track } from "@/lib/types";
 
 interface Props {
@@ -36,7 +35,7 @@ export function SelectionActionBar({
   onClear,
   onBulkTagEdit,
 }: Props) {
-  const { toggleLike, addTracksToPlaylist, deleteTrackWithFile, miniMode } = usePlayer();
+  const { toggleLike, addTracksToPlaylist, deleteTrackWithFile } = usePlayer();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [playlistOpen, setPlaylistOpen] = useState(false);
   const [likeAnimating, setLikeAnimating] = useState(false);
@@ -70,13 +69,9 @@ export function SelectionActionBar({
     onClear();
   };
 
-  // On Android in mini-mode the MiniPlayer card sits 104 px from the bottom.
-  // Add 112 px of bottom padding so the action bar clears it.
-  const androidMiniPad = currentPlatform === "android" && miniMode;
-
   return (
     <>
-      <div style={androidMiniPad ? { paddingBottom: "160px" } : undefined}>
+      <div>
       <div className="shrink-0 border-t border-card-border bg-card/95 backdrop-blur-sm px-3 py-2 flex items-center gap-1">
         <span className="text-xs font-semibold text-foreground flex-1 truncate">
           {count} {count === 1 ? "track" : "tracks"} selected

@@ -50,14 +50,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   /** Returns the port of the local YouTube embed proxy server. */
   getEmbedPort: () => ipcRenderer.invoke("get-embed-port"),
 
-  /** Fetch raw RSS XML for a podcast feed URL. */
-  podcastFetchRss: (url) => ipcRenderer.invoke("podcast-fetch-rss", url),
-
-  /** Fetch a YouTube playlist as podcast episodes via yt-dlp. */
+  /** Fetch a YouTube playlist's entries via yt-dlp. */
   ytGetPlaylist: (url) => ipcRenderer.invoke("yt-get-playlist", url),
-
-  /** Get the direct CDN audio URL for a YouTube video ID (for podcast playback). */
-  ytGetAudioUrl: (videoId) => ipcRenderer.invoke("yt-get-audio-url", videoId),
 
   /** Set whether closing the window minimizes to tray or quits the app. */
   setCloseBehavior: (behavior) =>
@@ -172,16 +166,16 @@ contextBridge.exposeInMainWorld("electronAPI", {
   /** Enable or disable Discord Rich Presence from the settings toggle. */
   discordRpcSetEnabled: (enabled) => ipcRenderer.send("discord-rpc-set-enabled", enabled),
 
-  /** Push current track + playback state to OS media integrations (MPRIS / SMTC). */
+  /** Push current track + playback state to OS media integrations (SMTC). */
   updateOsMedia: (state) => ipcRenderer.send("update-os-media", state),
 
-  /** Enable or disable OS media integration (MPRIS / SMTC) from the settings toggle. */
+  /** Enable or disable OS media integration (SMTC) from the settings toggle. */
   setOsMediaEnabled: (enabled) => ipcRenderer.send("set-os-media-enabled", enabled),
 
   /** Bring the hidden window back to the foreground. */
   showWindow: () => ipcRenderer.invoke("show-window"),
 
-  /** Returns the current OS platform string ("win32", "linux", "darwin"). */
+  /** Returns the current OS platform string ("win32"). */
   platform: process.platform,
 
   /** Minimize the Electron window (Windows custom titlebar). */
